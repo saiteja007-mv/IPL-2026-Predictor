@@ -4,6 +4,6 @@ xgboost
 scikit-learn
 matplotlib
 seaborn
-streamlit
+streamlit>=1.32.0
 Pillow
 openpyxl
