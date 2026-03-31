@@ -1,47 +1,47 @@
-"alias_id","team_id","alias_name"
-1,1,"RCB"
-2,1,"Royal Challengers Bengaluru"
-3,252,"Delhi Daredevils"
-4,494,"Kings XI Punjab"
-5,1,"Royal Challengers Bangalore"
-6,1,"Banglore"
-7,1,"Bengaluru"
-8,252,"Delhi Capitals"
-9,252,"DC"
-10,252,"DD"
-11,252,"Delhi"
-12,494,"Punjab Kings"
-13,494,"KXIP"
-14,494,"Punjab"
-15,2,"Sunrisers Hyderabad"
-16,2,"SRH"
-17,2,"Hyderabad"
-18,2,"Deccan Chargers"
-19,3,"Mumbai Indians"
-20,3,"MI"
-21,3,"Mumbai"
-22,4,"Rising Pune Supergiant"
-23,4,"Rising Pune Supergiants"
-24,4,"RPS"
-25,4,"Pune"
-26,5,"Gujarat Lions"
-27,5,"GL"
-28,6,"Kolkata Knight Riders"
-29,6,"KKR"
-30,6,"Kolkatta"
-31,129,"Chennai Super Kings"
-32,129,"CSK"
-33,129,"Chennai"
-34,134,"Rajasthan Royals"
-35,134,"Rajasthan"
-36,134,"RR"
-37,614,"Lucknow Super Giants"
-38,614,"LSG"
-39,614,"Lucknow"
-40,615,"Gujarat Titans"
-41,615,"GT"
-42,1414,"Kochi Tuskers Kerala"
-43,1414,"KTK"
-44,1414,"Kerala"
-45,1419,"Pune Warriors"
-46,1419,"PWI"
+alias_id,team_alias,alias_name
+1,RCB,RCB
+2,RCB,Royal Challengers Bengaluru
+3,DC,Delhi Daredevils
+4,PK,Kings XI Punjab
+5,RCB,Royal Challengers Bangalore
+6,RCB,Banglore
+7,RCB,Bengaluru
+8,DC,Delhi Capitals
+9,DC,DC
+10,DC,DD
+11,DC,Delhi
+12,PK,Punjab Kings
+13,PK,KXIP
+14,PK,Punjab
+15,SRH,Sunrisers Hyderabad
+16,SRH,SRH
+17,SRH,Hyderabad
+18,SRH,Deccan Chargers
+19,MI,Mumbai Indians
+20,MI,MI
+21,MI,Mumbai
+22,RPS,Rising Pune Supergiant
+23,RPS,Rising Pune Supergiants
+24,RPS,RPS
+25,RPS,Pune
+26,GL,Gujarat Lions
+27,GL,GL
+28,KKR,Kolkata Knight Riders
+29,KKR,KKR
+30,KKR,Kolkatta
+31,CSK,Chennai Super Kings
+32,CSK,CSK
+33,CSK,Chennai
+34,RR,Rajasthan Royals
+35,RR,Rajasthan
+36,RR,RR
+37,LSG,Lucknow Super Giants
+38,LSG,LSG
+39,LSG,Lucknow
+40,GT,Gujarat Titans
+41,GT,GT
+42,KTK,Kochi Tuskers Kerala
+43,KTK,KTK
+44,KTK,Kerala
+45,PW,Pune Warriors
+46,PW,PWI

@@ -2,105 +2,60 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Environment Setup
+## Project Overview
 
-```bash
-conda create -n ipl python=3.11 -y
-conda activate ipl
-pip install -r requirements.txt
-```
+IPL 2026 match winner prediction system — fresh start. The goal is to build an ML pipeline trained on 18 seasons of historical IPL data (2008–2025) to predict match outcomes for the 2026 season.
 
-**Windows note:** `numpy>=2.2` has a broken install on Windows; `requirements.txt` pins `numpy<2.2`.
+## Current State
 
-**Tesseract binary** (for OCR features):
-```bash
-sudo apt-get install tesseract-ocr   # Linux
-brew install tesseract               # macOS
-# Windows: download from https://github.com/UB-Mannheim/tesseract/wiki
-```
+This is a greenfield rebuild. The only files present are:
 
-## Running the App
+- `training.ipynb` — empty notebook (starting point for the ML pipeline)
+- `Datasets/` — raw data files ready to use
+- `IPL Team logos/` — team logo PNGs (10 teams + processed versions)
 
-```bash
-# Run the Streamlit web app
-streamlit run app.py
+No models, no app, no scripts exist yet — everything needs to be built.
 
-# Generate a demo prediction card (no model needed)
-python video_card_demo.py
+## Datasets
 
-# Build global T20 player stats (first time: ~200 MB download)
-python t20_data_pipeline.py --download
-# Subsequent runs without re-downloading:
-python t20_data_pipeline.py --no-parse
-```
+All source data is in `Datasets/`:
 
-## Project Root Path
+| File | Description |
+|------|-------------|
+| `matches.csv` | IPL match results 2008–2025 (season, teams, venue, toss, winner, result) |
+| `ball_by_ball_data.csv` | Aggregated ball-by-ball summary stats (2008–2025, ~278K deliveries, 1169 matches) |
+| `player_ipl_stats.csv` | Per-player IPL career aggregates: batting SR, bowling econ, experience, boundaries |
+| `player_lifetime_stats.csv` | Cross-league T20 career stats (international, IPL, BBL, PSL, Hundred, etc.) — use for uncapped/new players |
+| `players-data-updated.csv` | Player metadata: bat/bowl style, field position, full name, player_id |
+| `team_aliases.csv` | Maps all historical team name variants to canonical short codes (RCB, MI, CSK, etc.) |
+| `cricsheet_cache/all_male_json.zip` | Cached cricsheet.org download for rebuilding player stats |
 
-If Jupyter's CWD differs from the project folder, set:
-```powershell
-$env:IPL_PROJECT_ROOT = 'D:/Projects/IPL 2026'
-```
-`project_paths.py` reads this env var; `predictor.py` and `xi_extractor.py` use `Path(__file__).parent` directly.
+### Key Schema Notes
 
-## Architecture
+- `matches.csv` columns: `match_id, season_id, city, date, venue, toss_winner, team1, team2, toss_decision, winner, win_by_runs, win_by_wickets, player_of_match, result`
+- `player_ipl_stats.csv` columns: `player, matches_batted, total_runs, balls_faced, fours, sixes, batting_sr, avg_runs, boundary_pct, matches_bowled, balls_bowled, runs_conceded, wickets, overs, bowling_econ, bowling_sr, ipl_experience`
+- `player_lifetime_stats.csv` columns: `player_id, player_name, bat_style, bowl_style` + per-league stats (overall, international, national, domestic, ipl, psl, hundred, bbl, t10, other)
+- `team_aliases.csv`: always resolve team names through this before any lookup — covers defunct teams (RPS, GL, KTK, PW) and spelling variants
 
-### Data Flow
+## IPL 2026 Teams
 
-```
-Datasets/matches.csv + deliveries.csv
-        ↓
-training.ipynb  →  feature engineering  →  Models/*.pkl
-        ↓
-prediction.ipynb / app.py  →  predictor.py  →  ensemble prediction
-```
+| Code | Team | Home Ground |
+|------|------|-------------|
+| MI | Mumbai Indians | Wankhede Stadium |
+| CSK | Chennai Super Kings | MA Chidambaram Stadium |
+| RCB | Royal Challengers Bengaluru | M Chinnaswamy Stadium |
+| KKR | Kolkata Knight Riders | Eden Gardens |
+| DC | Delhi Capitals | Arun Jaitley Stadium |
+| SRH | Sunrisers Hyderabad | Rajiv Gandhi International Stadium |
+| RR | Rajasthan Royals | Sawai Mansingh Stadium |
+| PK | Punjab Kings | Punjab Cricket Association Stadium |
+| LSG | Lucknow Super Giants | BRSABV Ekana Cricket Stadium |
+| GT | Gujarat Titans | Narendra Modi Stadium |
 
-### Key Files
+## Design Principles for New Code
 
-| File | Role |
-|------|------|
-| `predictor.py` | Core prediction engine — loads models/data, computes features, exposes `predict_match()`. Imported by `app.py`. |
-| `app.py` | Streamlit 4-page UI: Predict Match, Season Tracker, Log Match Result, Stats Explorer |
-| `xi_extractor.py` | Playing XI extraction from images via Tesseract OCR → Ollama LLM → regex/fuzzy fallback |
-| `t20_data_pipeline.py` | Downloads cricsheet YAML data and builds `player_stats_enhanced.csv` (global T20 career stats) |
-| `video_card.py` | Generates PNG prediction cards (matplotlib) |
-| `training.ipynb` | Full training pipeline: data download, EDA, feature engineering, model training, save artifacts |
-| `prediction.ipynb` | Standalone notebook for batch prediction and post-match dataset updates |
-
-### Model Ensemble
-
-Three models trained on IPL 2008–2024, tested on 2025, saved to `Models/`:
-- `lgbm_ipl_model.pkl` — LightGBM (primary)
-- `catboost_ipl_model.pkl` — CatBoost (handles team-name categoricals)
-- `xgb_ipl_model.pkl` — XGBoost (baseline)
-- `ensemble_ipl_model.pkl` — Soft-voting ensemble (~72–75% accuracy)
-- `feature_columns.pkl`, `team_name_map.pkl`, `elo_ratings.pkl` — supporting artifacts
-
-### Feature Engineering (no leakage)
-
-All features are computed using only data available **before** the match:
-- **Elo ratings** — rolling team strength updated after every match
-- **Team form** — last 5 matches overall + last 3 this season
-- **Head-to-head** — all-time record between the two teams
-- **Venue stats** — bat-first win %, per-team venue win %
-- **Player strength** — batting SR, bowling economy aggregated to team level
-- **New player handling** — zero-IPL-history players get league-average defaults
-
-### Player Stats Priority
-
-`predictor.py` and `xi_extractor.py` prefer `Datasets/player_stats_enhanced.csv` (global T20 stats from cricsheet pipeline) over `Datasets/player_stats.csv` when the file exists.
-
-## Ollama Integration (Playing XI from Photos)
-
-`xi_extractor.py` connects to Ollama at `http://127.0.0.1:11434` (default) or `OLLAMA_HOST` env var. The health check hits `/api/tags` — **do not add `/v1` to the base URL**.
-
-```bash
-ollama pull llama3.2          # text model (uses Tesseract OCR first)
-ollama pull llava             # vision model (reads image directly)
-ollama serve                  # starts API on port 11434
-```
-
-If Ollama is unreachable the extractor silently falls back to regex + rapidfuzz matching against the known player list.
-
-## Updating the Dataset After Matches
-
-Add completed match results in `prediction.ipynb` Section 4, then restart the kernel so `predictor.py` reloads the updated CSVs. For the model to learn from 2026 data, re-run `training.ipynb` after adding results.
+- Use `team_aliases.csv` for all team name normalisation — never hardcode variants
+- Prefer `player_lifetime_stats.csv` as fallback for players absent from `player_ipl_stats.csv`
+- Keep a centralised `project_paths.py` so all scripts/notebooks import paths from one place
+- Save trained model artifacts to a `Models/` directory
+- Append new 2026 match results to `matches.csv` after each game; re-run feature engineering to update Elo/form

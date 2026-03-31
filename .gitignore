@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Large cached data
+Datasets/cricsheet_cache/
+
+# IDE
+.cursor/
+.vscode/
+.idea/
+
+# CatBoost artifacts
+catboost_info/
+
+# Output (generated locally)
+output/
+
+# OS
+.DS_Store
+Thumbs.db

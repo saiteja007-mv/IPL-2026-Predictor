@@ -1,24 +1,9 @@
-# Conda env: conda create -n ipl python=3.11 -y && conda activate ipl && pip install -r requirements.txt
-#
-# Pin numpy<2.2: numpy 2.4.x on Windows can hit a broken _multiarray_umath install; use 2.1.x LTS wheels.
-pandas>=2.0
-numpy>=1.26,<2.2
-scikit-learn>=1.3
-xgboost>=2.0
-lightgbm>=4.0
-catboost>=1.2
-matplotlib>=3.7
-seaborn>=0.13
-Pillow>=10.0
-kagglehub>=0.2
-joblib>=1.3
-jupyter>=1.0
-ipykernel>=6.25
-streamlit>=1.32
-# --- T20 data pipeline ---
-requests>=2.31
-pyyaml>=6.0
-# --- Playing XI OCR extraction ---
-pytesseract>=0.3
-rapidfuzz>=3.0
-# Note: Pillow>=10.0 already listed above; tesseract binary: sudo apt-get install tesseract-ocr
+pandas
+numpy
+xgboost
+scikit-learn
+matplotlib
+seaborn
+streamlit
+Pillow
+openpyxl
