@@ -16,9 +16,6 @@ Datasets/cricsheet_cache/
 # CatBoost artifacts
 catboost_info/
 
-# Output (generated locally)
-output/
-
 # OS
 .DS_Store
 Thumbs.db
