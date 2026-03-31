@@ -14,13 +14,15 @@ An ML-powered match prediction system for the Indian Premier League 2026 season,
 
 1. **Select two teams**, venue, toss winner, and toss decision
 2. **Pick Playing XI** for each team from the 2026 squad list (with overseas player limit tracking — max 4 per team)
-3. **Get a prediction** with win probability, radar chart, factor scorecard, and a plain-English breakdown of why
+3. **Pick the projected impact player** from the bench for each team
+4. **Get a prediction** with win probability, radar chart, factor scorecard, and a plain-English breakdown of why
 
 ## Features
 
 - **25-feature XGBoost model** — Elo ratings, recent form, head-to-head record, venue stats, toss impact, and player-level batting/bowling/experience metrics
 - **Smart name resolution** — enter player names in any format (full name, cricsheet format, or partial) and the system resolves them automatically
 - **Overseas player tracking** — flags overseas players and enforces the 4-per-XI limit
+- **Impact-player aware predictions** — projects one bench substitute per team, enforces the overseas restriction for that rule, and adjusts the effective batting or bowling strength based on toss context
 - **Visual breakdowns** — radar chart comparing 6 dimensions, factor scorecard, and comparison bars for every metric
 - **Excel tracker** — `output/IPL_2026_Predictions.xlsx` with dropdown menus for teams/venues, dependent dropdowns for toss winner and match result, conditional formatting (green = correct, red = wrong), and a summary sheet with accuracy stats
 
@@ -43,6 +45,16 @@ An ML-powered match prediction system for the Indian Premier League 2026 season,
 - **Toss** — Toss winner, bat/field decision
 - **Home Advantage** — Whether either team is playing at their home ground
 - **Player Stats** — Average batting strike rate, bowling economy, experience, and runs per player in the Playing XI
+
+### Impact Player Modeling
+
+The saved XGBoost model still uses the same 25 features. The impact-player rule is modeled at prediction time by adjusting the effective lineup strength before those features are assembled:
+
+- If a team is **batting first**, the app assumes the impact substitute is most likely to matter while **defending**, so it looks for a bowling upgrade from the bench.
+- If a team is **chasing**, the app assumes the impact substitute is most likely to matter in the **run chase**, so it looks for a batting upgrade from the bench.
+- If the starting XI already has **4 overseas players**, the projected impact player must be Indian.
+
+This keeps the trained model compatible with the existing artifacts while letting 2026 predictions react to the impact-player rule.
 
 ## Project Structure
 

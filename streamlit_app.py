@@ -230,6 +230,10 @@ def load_player_stats():
             "bowling_econ": row["bowling_econ"] if pd.notna(row["bowling_econ"]) else 0,
             "experience": row["ipl_experience"] if pd.notna(row["ipl_experience"]) else 0,
             "avg_runs": row["avg_runs"] if pd.notna(row["avg_runs"]) else 0,
+            "batting_innings": row["matches_batted"] if pd.notna(row["matches_batted"]) else 0,
+            "bowling_innings": row["matches_bowled"] if pd.notna(row["matches_bowled"]) else 0,
+            "balls_bowled": row["balls_bowled"] if pd.notna(row["balls_bowled"]) else 0,
+            "wickets": row["wickets"] if pd.notna(row["wickets"]) else 0,
         }
 
     lifetime = {}
@@ -239,6 +243,10 @@ def load_player_stats():
             "bowling_econ": row["overall_bowling_econ"] if pd.notna(row["overall_bowling_econ"]) else 0,
             "experience": row["overall_matches"] if pd.notna(row["overall_matches"]) else 0,
             "avg_runs": row["overall_batting_avg"] if pd.notna(row["overall_batting_avg"]) else 0,
+            "batting_innings": row["overall_batting_innings"] if pd.notna(row["overall_batting_innings"]) else 0,
+            "bowling_innings": row["overall_bowling_innings"] if pd.notna(row["overall_bowling_innings"]) else 0,
+            "balls_bowled": row["overall_balls_bowled"] if pd.notna(row["overall_balls_bowled"]) else 0,
+            "wickets": row["overall_wickets"] if pd.notna(row["overall_wickets"]) else 0,
         }
 
     return ipl_stats, lifetime
@@ -298,7 +306,57 @@ def build_name_resolver():
 # ============================================================
 # Helper Functions (same logic as training notebook)
 # ============================================================
-DEFAULT_STATS = {"batting_sr": 120.0, "bowling_econ": 8.0, "experience": 0, "avg_runs": 20.0}
+ROLE_ICONS = {
+    "batter": "🏏",
+    "bowler": "🎯",
+    "all_rounder": "🧰",
+}
+
+ROLE_LABELS = {
+    "batter": "batter",
+    "bowler": "bowler",
+    "all_rounder": "all-rounder",
+}
+
+
+def build_player_meta_lookup(players_meta):
+    """Create a lowercase name -> batting/bowling style lookup."""
+    lookup = {}
+    for _, row in players_meta.iterrows():
+        bat_style = row["bat_style"] if pd.notna(row["bat_style"]) else ""
+        bowl_style = row["bowl_style"] if pd.notna(row["bowl_style"]) else ""
+
+        keys = set()
+        for col in ("player_name", "player_full_name"):
+            value = row.get(col)
+            if pd.notna(value) and str(value).strip():
+                keys.add(str(value).strip().lower())
+
+        full_name = row["player_full_name"] if "player_full_name" in row and pd.notna(row["player_full_name"]) else ""
+        if full_name:
+            parts = full_name.strip().split()
+            if len(parts) >= 2:
+                keys.add(f"{parts[0]} {parts[-1]}".lower())
+
+        for key in keys:
+            lookup[key] = {
+                "bat_style": bat_style,
+                "bowl_style": bowl_style,
+            }
+
+    return lookup
+
+
+DEFAULT_STATS = {
+    "batting_sr": 120.0,
+    "bowling_econ": 8.0,
+    "experience": 0,
+    "avg_runs": 20.0,
+    "batting_innings": 0,
+    "bowling_innings": 0,
+    "balls_bowled": 0,
+    "wickets": 0,
+}
 
 
 def resolve_player_name(name, full_to_cricsheet, all_cricsheet_names):
@@ -364,6 +422,76 @@ def get_player_stats(name, ipl_stats, lifetime_stats):
     return DEFAULT_STATS.copy()
 
 
+def infer_player_role(name, full_to_cricsheet, all_cricsheet_names, player_meta_lookup, ipl_stats, lifetime_stats):
+    """Infer whether a player is primarily a batter, bowler, or all-rounder."""
+    resolved_name, _ = resolve_player_name(name, full_to_cricsheet, all_cricsheet_names)
+    stats = get_player_stats(resolved_name, ipl_stats, lifetime_stats)
+
+    meta = player_meta_lookup.get(name.strip().lower()) or player_meta_lookup.get(resolved_name.strip().lower(), {})
+    bowl_style = str(meta.get("bowl_style", "") or "").strip().lower()
+
+    batting_innings = float(stats.get("batting_innings", 0) or 0)
+    avg_runs = float(stats.get("avg_runs", 0) or 0)
+    bowling_innings = float(stats.get("bowling_innings", 0) or 0)
+    balls_bowled = float(stats.get("balls_bowled", 0) or 0)
+    wickets = float(stats.get("wickets", 0) or 0)
+
+    has_real_batting = batting_innings >= 15 and avg_runs >= 16
+    has_real_bowling = wickets >= 12 or balls_bowled >= 360 or (bowling_innings >= 25 and wickets >= 8)
+
+    if has_real_bowling and has_real_batting:
+        return "all_rounder"
+    if has_real_bowling:
+        return "bowler"
+
+    has_declared_bowling_style = bowl_style not in {"", "null", "none", "-", "na", "n/a"}
+    if has_declared_bowling_style and (bowling_innings >= 8 or balls_bowled >= 96):
+        return "all_rounder" if has_real_batting else "bowler"
+
+    return "batter"
+
+
+def format_player_option_label(
+    player,
+    overseas_set,
+    full_to_cricsheet,
+    all_cricsheet_names,
+    player_meta_lookup,
+    ipl_stats,
+    lifetime_stats,
+    recommended=False,
+):
+    """Build the dropdown label with role/overseas/recommendation markers."""
+    role = infer_player_role(
+        player,
+        full_to_cricsheet,
+        all_cricsheet_names,
+        player_meta_lookup,
+        ipl_stats,
+        lifetime_stats,
+    )
+
+    parts = [player, ROLE_ICONS[role]]
+    if player in overseas_set:
+        parts.append("🌍")
+    if recommended:
+        parts.append("⭐")
+    return "  ".join(parts)
+
+
+def format_player_role_text(name, full_to_cricsheet, all_cricsheet_names, player_meta_lookup, ipl_stats, lifetime_stats):
+    """Return a compact human-readable role label for a player."""
+    role = infer_player_role(
+        name,
+        full_to_cricsheet,
+        all_cricsheet_names,
+        player_meta_lookup,
+        ipl_stats,
+        lifetime_stats,
+    )
+    return f"{ROLE_ICONS[role]} {ROLE_LABELS[role]}"
+
+
 def normalize_team(name, alias_map):
     if pd.isna(name):
         return name
@@ -421,10 +549,200 @@ def is_home(team, venue):
     return 0
 
 
+def team_bats_first(team_code, toss_winner_code, toss_decision):
+    """Return True if this team is projected to bat first."""
+    if toss_winner_code == team_code:
+        return toss_decision == "bat"
+    return toss_decision == "field"
+
+
+def summarize_lineup_stats(stats_list):
+    """Collapse a list of player stats into model-ready lineup averages."""
+    return {
+        "batting_sr": float(np.mean([s["batting_sr"] for s in stats_list])),
+        "bowling_econ": float(np.mean([s["bowling_econ"] for s in stats_list])),
+        "experience": float(np.mean([s["experience"] for s in stats_list])),
+        "avg_runs": float(np.mean([s["avg_runs"] for s in stats_list])),
+    }
+
+
+def batting_score(stats):
+    """Simple batting composite used to judge impact-batter upgrades."""
+    return float(stats["avg_runs"]) + (float(stats["batting_sr"]) / 10.0)
+
+
+def bowling_score(stats):
+    """
+    Bowling composite used to judge impact-bowler upgrades.
+    Non-bowlers are intentionally penalized so batting-only players are the
+    most likely outgoing option when a team brings in a specialist bowler.
+    """
+    bowling_innings = float(stats.get("bowling_innings", 0) or 0)
+    balls_bowled = float(stats.get("balls_bowled", 0) or 0)
+    if bowling_innings <= 0 and balls_bowled <= 0:
+        return -5.0
+
+    econ = float(stats["bowling_econ"]) if stats["bowling_econ"] > 0 else 9.5
+    sample_bonus = min(balls_bowled / 120.0, 1.0) + min(bowling_innings / 10.0, 1.0) * 0.25
+    return (10.5 - econ) + sample_bonus
+
+
+def apply_impact_substitution(team_xi, impact_player, phase, ipl_stats, lifetime_stats):
+    """
+    Model the most likely one-for-one impact swap for either batting or bowling.
+    The model features stay unchanged; we only update the effective lineup stats
+    for the innings where the impact substitute is most likely to matter.
+    """
+    base_names = list(team_xi)
+    base_stats = [get_player_stats(p, ipl_stats, lifetime_stats) for p in base_names]
+    baseline = summarize_lineup_stats(base_stats)
+
+    phase_result = {
+        "stats": baseline,
+        "used": False,
+        "impact_player": impact_player,
+        "replaced_player": None,
+        "score_gain": 0.0,
+        "phase": phase,
+    }
+
+    if not impact_player or len(base_names) != 11:
+        return phase_result
+
+    impact_stats = get_player_stats(impact_player, ipl_stats, lifetime_stats)
+
+    if phase == "batting":
+        scores = [batting_score(s) for s in base_stats]
+        candidate_score = batting_score(impact_stats)
+    else:
+        scores = [bowling_score(s) for s in base_stats]
+        candidate_score = bowling_score(impact_stats)
+
+    replace_idx = int(np.argmin(scores))
+    replaced_score = scores[replace_idx]
+
+    if candidate_score <= replaced_score:
+        return phase_result
+
+    phase_stats = list(base_stats)
+    phase_stats[replace_idx] = impact_stats
+
+    phase_result.update({
+        "stats": summarize_lineup_stats(phase_stats),
+        "used": True,
+        "replaced_player": base_names[replace_idx],
+        "score_gain": float(candidate_score - replaced_score),
+    })
+    return phase_result
+
+
+def build_effective_team_strength(team_xi, impact_player, bats_first, ipl_stats, lifetime_stats):
+    """
+    IPL impact player rule approximation:
+    - team batting first is more likely to bring in a bowler while defending
+    - team chasing is more likely to bring in a batter for the chase
+    """
+    base_stats = [get_player_stats(p, ipl_stats, lifetime_stats) for p in team_xi]
+    baseline = summarize_lineup_stats(base_stats)
+
+    batting_phase = {
+        "stats": baseline,
+        "used": False,
+        "impact_player": impact_player,
+        "replaced_player": None,
+        "score_gain": 0.0,
+        "phase": "batting",
+    }
+    bowling_phase = {
+        "stats": baseline,
+        "used": False,
+        "impact_player": impact_player,
+        "replaced_player": None,
+        "score_gain": 0.0,
+        "phase": "bowling",
+    }
+
+    primary_phase = "bowling" if bats_first else "batting"
+    primary_result = apply_impact_substitution(team_xi, impact_player, primary_phase, ipl_stats, lifetime_stats)
+    if primary_phase == "batting":
+        batting_phase = primary_result
+    else:
+        bowling_phase = primary_result
+
+    effective = {
+        "batting_sr": batting_phase["stats"]["batting_sr"],
+        "bowling_econ": bowling_phase["stats"]["bowling_econ"],
+        "experience": float(np.mean([
+            batting_phase["stats"]["experience"],
+            bowling_phase["stats"]["experience"],
+        ])),
+        "avg_runs": batting_phase["stats"]["avg_runs"],
+    }
+
+    profile = {
+        "impact_player": impact_player,
+        "used": batting_phase["used"] or bowling_phase["used"],
+        "strategy": "bowling" if bats_first else "batting",
+        "baseline": baseline,
+        "effective": effective,
+        "batting_phase": batting_phase,
+        "bowling_phase": bowling_phase,
+    }
+    return effective, profile
+
+
+def recommend_impact_player(
+    team_xi,
+    squad,
+    overseas_set,
+    bats_first,
+    ipl_stats,
+    lifetime_stats,
+    full_to_cricsheet,
+    all_cricsheet_names,
+):
+    """Pick the bench player with the biggest expected impact gain."""
+    if len(team_xi) != 11 or not squad:
+        return None
+
+    overseas_in_xi = sum(1 for p in team_xi if p in overseas_set)
+    resolved_xi = [
+        resolve_player_name(player, full_to_cricsheet, all_cricsheet_names)[0]
+        for player in team_xi
+    ]
+
+    best_player = None
+    best_gain = 0.0
+
+    for player in squad:
+        if player in team_xi:
+            continue
+        if player in overseas_set and overseas_in_xi >= 4:
+            continue
+
+        resolved_player = resolve_player_name(player, full_to_cricsheet, all_cricsheet_names)[0]
+        _, profile = build_effective_team_strength(
+            resolved_xi,
+            resolved_player,
+            bats_first,
+            ipl_stats,
+            lifetime_stats,
+        )
+
+        phase_key = "bowling_phase" if bats_first else "batting_phase"
+        gain = profile[phase_key]["score_gain"]
+        if gain > best_gain:
+            best_player = player
+            best_gain = gain
+
+    return best_player
+
+
 def predict_match(
     team1_code, team2_code, venue, toss_winner_code, toss_decision,
     team1_xi, team2_xi, model, feature_cols, elo_ratings, match_history,
     ipl_stats, lifetime_stats,
+    team1_impact_player=None, team2_impact_player=None,
 ):
     """Run prediction and return results dict."""
     # Elo
@@ -450,19 +768,34 @@ def predict_match(
     t1_home = is_home(team1_code, venue)
     t2_home = is_home(team2_code, venue)
 
-    # Player strength
-    t1_stats = [get_player_stats(p, ipl_stats, lifetime_stats) for p in team1_xi]
-    t2_stats = [get_player_stats(p, ipl_stats, lifetime_stats) for p in team2_xi]
+    # Player strength, adjusted for the projected impact substitute.
+    t1_bats_first = team_bats_first(team1_code, toss_winner_code, toss_decision)
+    t2_bats_first = team_bats_first(team2_code, toss_winner_code, toss_decision)
 
-    t1_bat_sr = np.mean([s["batting_sr"] for s in t1_stats])
-    t1_bowl_econ = np.mean([s["bowling_econ"] for s in t1_stats])
-    t1_exp = np.mean([s["experience"] for s in t1_stats])
-    t1_avg_runs = np.mean([s["avg_runs"] for s in t1_stats])
+    t1_strength, t1_impact_profile = build_effective_team_strength(
+        team1_xi,
+        team1_impact_player,
+        t1_bats_first,
+        ipl_stats,
+        lifetime_stats,
+    )
+    t2_strength, t2_impact_profile = build_effective_team_strength(
+        team2_xi,
+        team2_impact_player,
+        t2_bats_first,
+        ipl_stats,
+        lifetime_stats,
+    )
 
-    t2_bat_sr = np.mean([s["batting_sr"] for s in t2_stats])
-    t2_bowl_econ = np.mean([s["bowling_econ"] for s in t2_stats])
-    t2_exp = np.mean([s["experience"] for s in t2_stats])
-    t2_avg_runs = np.mean([s["avg_runs"] for s in t2_stats])
+    t1_bat_sr = t1_strength["batting_sr"]
+    t1_bowl_econ = t1_strength["bowling_econ"]
+    t1_exp = t1_strength["experience"]
+    t1_avg_runs = t1_strength["avg_runs"]
+
+    t2_bat_sr = t2_strength["batting_sr"]
+    t2_bowl_econ = t2_strength["bowling_econ"]
+    t2_exp = t2_strength["experience"]
+    t2_avg_runs = t2_strength["avg_runs"]
 
     features = pd.DataFrame([{
         "team1_elo": t1_elo,
@@ -516,6 +849,8 @@ def predict_match(
         "t2_bowl_econ": t2_bowl_econ,
         "t1_exp": t1_exp,
         "t2_exp": t2_exp,
+        "team1_impact": t1_impact_profile,
+        "team2_impact": t2_impact_profile,
     }
 
 
@@ -529,6 +864,7 @@ if not os.path.exists("Models/xgb_model.pkl"):
 model, feature_cols, elo_ratings, alias_map, match_history = load_model()
 ipl_stats, lifetime_stats = load_player_stats()
 full_to_cricsheet, players_meta = build_name_resolver()
+player_meta_lookup = build_player_meta_lookup(players_meta)
 
 # All known cricsheet-format names (for fuzzy matching)
 all_cricsheet_names = sorted(set(list(ipl_stats.keys()) + list(lifetime_stats.keys())))
@@ -570,13 +906,16 @@ with st.sidebar:
     toss_decision = st.selectbox("Toss Decision", ["field", "bat"])
 
     st.markdown("---")
-    st.caption("Enter Playing XI below (one name per line)")
+    st.caption("Select the Playing XI and projected impact player for each team.")
 
 # ============================================================
 # UI — Playing XI Input
 # ============================================================
 team1_code = TEAMS[team1_name]
 team2_code = TEAMS[team2_name]
+toss_winner_code = TEAMS[toss_winner]
+team1_bats_first = team_bats_first(team1_code, toss_winner_code, toss_decision)
+team2_bats_first = team_bats_first(team2_code, toss_winner_code, toss_decision)
 
 col_xi1, col_xi2 = st.columns(2)
 
@@ -587,18 +926,30 @@ overseas1 = OVERSEAS_PLAYERS.get(team1_code, set())
 overseas2 = OVERSEAS_PLAYERS.get(team2_code, set())
 
 
-def render_xi_selector(col, team_name, team_code, squad, overseas_set, key_suffix):
-    """Render the Playing XI selector with overseas tracking."""
+def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_first, key_suffix):
+    """Render the Playing XI + impact player selector with overseas tracking."""
     with col:
         logo_path = f"{LOGO_DIR}/{team_code}.png"
         c_logo, c_name = st.columns([0.3, 2])
         if os.path.exists(logo_path):
             c_logo.image(logo_path, width=55)
         c_name.subheader(team_name)
+        st.caption("Icons: 🏏 batter · 🎯 bowler · 🧰 all-rounder · 🌍 overseas")
 
         if squad:
             # Format options: add flag for overseas players
-            display_options = [f"{p}  🌍" if p in overseas_set else p for p in squad]
+            display_options = [
+                format_player_option_label(
+                    p,
+                    overseas_set,
+                    full_to_cricsheet,
+                    all_cricsheet_names,
+                    player_meta_lookup,
+                    ipl_stats,
+                    lifetime_stats,
+                )
+                for p in squad
+            ]
             option_map = dict(zip(display_options, squad))  # display -> real name
 
             selected_display = st.multiselect(
@@ -628,7 +979,79 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, key_suffi
             else:
                 st.caption(" · ".join(status_parts))
 
-            return selected_real, overseas_count
+            strategy_text = "bowling impact while defending" if bats_first else "batting impact while chasing"
+            st.caption(f"Impact player model: {strategy_text}.")
+
+            if len(selected_real) != 11:
+                st.selectbox(
+                    f"Projected Impact Player ({team_code})",
+                    options=["Complete the Playing XI first"],
+                    index=0,
+                    disabled=True,
+                    key=f"impact_{key_suffix}_select",
+                )
+                return selected_real, overseas_count, None
+
+            recommended_player = recommend_impact_player(
+                selected_real,
+                squad,
+                overseas_set,
+                bats_first,
+                ipl_stats,
+                lifetime_stats,
+                full_to_cricsheet,
+                all_cricsheet_names,
+            )
+
+            bench_players = [p for p in squad if p not in selected_real]
+            display_options = ["None"]
+            option_map = {"None": None}
+
+            for player in bench_players:
+                label = format_player_option_label(
+                    player,
+                    overseas_set,
+                    full_to_cricsheet,
+                    all_cricsheet_names,
+                    player_meta_lookup,
+                    ipl_stats,
+                    lifetime_stats,
+                    recommended=(player == recommended_player),
+                )
+                display_options.append(label)
+                option_map[label] = player
+
+            default_label = "None"
+            if recommended_player:
+                default_label = next(
+                    (label for label, player in option_map.items() if player == recommended_player),
+                    "None",
+                )
+
+            selected_impact_display = st.selectbox(
+                f"Projected Impact Player ({team_code})",
+                options=display_options,
+                index=display_options.index(default_label),
+                key=f"impact_{key_suffix}_select",
+                help="One projected substitute from the bench. The app models this player as a batting boost while chasing or a bowling boost while defending.",
+            )
+            selected_impact = option_map[selected_impact_display]
+
+            if selected_impact and selected_impact in overseas_set and overseas_count >= 4:
+                st.error("Overseas impact player not allowed when the starting XI already has 4 overseas players.")
+            elif selected_impact:
+                role_text = format_player_role_text(
+                    selected_impact,
+                    full_to_cricsheet,
+                    all_cricsheet_names,
+                    player_meta_lookup,
+                    ipl_stats,
+                    lifetime_stats,
+                )
+                strategy_text = "bowling impact while defending" if bats_first else "batting impact while chasing"
+                st.caption(f"Projected impact player: {selected_impact} ({role_text}). Model context: {strategy_text}.")
+
+            return selected_real, overseas_count, selected_impact
         else:
             xi_text = st.text_area(
                 f"Playing XI — {team_code}",
@@ -637,11 +1060,20 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, key_suffi
                 label_visibility="collapsed",
             )
             xi = [n.strip() for n in xi_text.strip().split("\n") if n.strip()]
-            return xi, 0
+            impact_text = st.text_input(
+                f"Projected Impact Player ({team_code})",
+                key=f"impact_{key_suffix}_text",
+                help="Optional when squad auto-fill is unavailable.",
+            ).strip()
+            return xi, 0, impact_text or None
 
 
-team1_xi, t1_overseas_count = render_xi_selector(col_xi1, team1_name, team1_code, squad1, overseas1, "1")
-team2_xi, t2_overseas_count = render_xi_selector(col_xi2, team2_name, team2_code, squad2, overseas2, "2")
+team1_xi, t1_overseas_count, team1_impact = render_xi_selector(
+    col_xi1, team1_name, team1_code, squad1, overseas1, team1_bats_first, "1"
+)
+team2_xi, t2_overseas_count, team2_impact = render_xi_selector(
+    col_xi2, team2_name, team2_code, squad2, overseas2, team2_bats_first, "2"
+)
 
 # ============================================================
 # UI — Predict Button
@@ -663,12 +1095,16 @@ if predict_clicked:
         errors.append(f"{team1_name}: selected {len(team1_xi)} players (need exactly 11)")
     if t1_overseas_count > 4:
         errors.append(f"{team1_name}: {t1_overseas_count} overseas players selected (max 4 allowed)")
+    if team1_impact and team1_impact in overseas1 and t1_overseas_count >= 4:
+        errors.append(f"{team1_name}: overseas impact player not allowed when the starting XI already has 4 overseas players")
     if len(team2_xi) == 0:
         errors.append(f"Enter Playing XI for {team2_name}")
     elif len(team2_xi) != 11:
         errors.append(f"{team2_name}: selected {len(team2_xi)} players (need exactly 11)")
     if t2_overseas_count > 4:
         errors.append(f"{team2_name}: {t2_overseas_count} overseas players selected (max 4 allowed)")
+    if team2_impact and team2_impact in overseas2 and t2_overseas_count >= 4:
+        errors.append(f"{team2_name}: overseas impact player not allowed when the starting XI already has 4 overseas players")
 
     if errors:
         for err in errors:
@@ -683,6 +1119,7 @@ if predict_clicked:
     resolved_names_t2 = []
     unknown_t1 = []
     unknown_t2 = []
+    impact_resolutions = []
 
     for name in team1_xi:
         resolved, found = resolve_player_name(name, full_to_cricsheet, all_cricsheet_names)
@@ -700,11 +1137,29 @@ if predict_clicked:
         elif resolved != name:
             resolved_names_t2.append(f"{name} -> **{resolved}**")
 
+    resolved_t1_impact = None
+    if team1_impact:
+        resolved_t1_impact, found = resolve_player_name(team1_impact, full_to_cricsheet, all_cricsheet_names)
+        if not found:
+            unknown_t1.append(team1_impact)
+        elif resolved_t1_impact != team1_impact:
+            impact_resolutions.append(f"**{team1_code}** impact: {team1_impact} -> **{resolved_t1_impact}**")
+
+    resolved_t2_impact = None
+    if team2_impact:
+        resolved_t2_impact, found = resolve_player_name(team2_impact, full_to_cricsheet, all_cricsheet_names)
+        if not found:
+            unknown_t2.append(team2_impact)
+        elif resolved_t2_impact != team2_impact:
+            impact_resolutions.append(f"**{team2_code}** impact: {team2_impact} -> **{resolved_t2_impact}**")
+
     # Show name resolutions
     if resolved_names_t1:
         st.info(f"**{team1_code}** name matches: " + ", ".join(resolved_names_t1))
     if resolved_names_t2:
         st.info(f"**{team2_code}** name matches: " + ", ".join(resolved_names_t2))
+    if impact_resolutions:
+        st.info(" | ".join(impact_resolutions))
 
     if unknown_t1:
         st.warning(f"**{team1_code}** — unknown players (using defaults): {', '.join(unknown_t1)}")
@@ -721,6 +1176,8 @@ if predict_clicked:
         team1_code, team2_code, venue, toss_winner_code, toss_decision,
         team1_xi, team2_xi, model, feature_cols, elo_ratings, match_history,
         ipl_stats, lifetime_stats,
+        team1_impact_player=resolved_t1_impact,
+        team2_impact_player=resolved_t2_impact,
     )
 
     t1_prob = result["t1_prob"]
@@ -753,6 +1210,74 @@ if predict_clicked:
         <span style="width: 60px; font-weight: 600;">{team2_code}</span>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("### Impact Player Assumptions")
+    st.caption("The app projects one bench substitute per team. Batting-first teams get a bowling-impact lens; chasing teams get a batting-impact lens.")
+
+    def render_impact_card(col, team_name, team_code, profile):
+        with col:
+            phase_key = "bowling_phase" if profile["strategy"] == "bowling" else "batting_phase"
+            phase_label = "Bowling swap while defending" if profile["strategy"] == "bowling" else "Batting swap while chasing"
+            impact_name = profile["impact_player"] or "No impact player selected"
+            role_text = None
+            if profile["impact_player"]:
+                role_text = format_player_role_text(
+                    profile["impact_player"],
+                    full_to_cricsheet,
+                    all_cricsheet_names,
+                    player_meta_lookup,
+                    ipl_stats,
+                    lifetime_stats,
+                )
+
+            if profile["used"]:
+                phase_profile = profile[phase_key]
+                if profile["strategy"] == "bowling":
+                    delta_text = (
+                        f"Bowling economy {profile['baseline']['bowling_econ']:.2f} -> "
+                        f"{profile['effective']['bowling_econ']:.2f}"
+                    )
+                else:
+                    delta_text = (
+                        f"Bat SR {profile['baseline']['batting_sr']:.1f} -> {profile['effective']['batting_sr']:.1f} "
+                        f"and Avg Runs {profile['baseline']['avg_runs']:.1f} -> {profile['effective']['avg_runs']:.1f}"
+                    )
+                body_text = (
+                    f"Selected player: {impact_name}"
+                    f"{f' ({role_text})' if role_text else ''}. "
+                    f"{impact_name} replaces {phase_profile['replaced_player']} in the projected "
+                    f"{phase_label.lower()} scenario. {delta_text}."
+                )
+                tone_color = "#58a6ff"
+            elif profile["impact_player"]:
+                body_text = (
+                    f"Selected player: {impact_name}"
+                    f"{f' ({role_text})' if role_text else ''}. "
+                    f"The current XI still projects stronger for "
+                    f"{phase_label.lower()}, so the baseline XI was kept."
+                )
+                tone_color = "#f7c948"
+            else:
+                body_text = "No impact player selected. Prediction uses the Playing XI as entered."
+                tone_color = "#8b949e"
+
+            st.markdown(f"""
+            <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px; margin: 8px 0;">
+                <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: #8b949e;">
+                    {team_code} Impact Plan
+                </div>
+                <div style="font-size: 1.05rem; font-weight: 700; color: {tone_color}; margin-top: 4px;">
+                    {phase_label}
+                </div>
+                <div style="font-size: 0.85rem; color: #e6edf3; margin-top: 8px;">
+                    {body_text}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    impact_col1, impact_col2 = st.columns(2)
+    render_impact_card(impact_col1, team1_name, team1_code, result["team1_impact"])
+    render_impact_card(impact_col2, team2_name, team2_code, result["team2_impact"])
 
     # --- Visual Charts ---
     chart_col1, chart_col2 = st.columns(2)
@@ -896,7 +1421,7 @@ if predict_clicked:
 
     # --- Why This Team Wins ---
     st.markdown("### Why this prediction?")
-    st.caption("Here's what the model looked at — plain-English breakdown of the key factors.")
+    st.caption("Here's what the model looked at — plain-English breakdown of the key factors, including the projected impact-player swap.")
 
     # Helper: build a comparison bar HTML
     def compare_bar(label, t1_val, t2_val, t1_code, t2_code, higher_is_better=True, fmt=".0f"):
@@ -1095,7 +1620,7 @@ if predict_clicked:
             Squad Power Comparison
         </div>
         <div style="font-size: 0.8rem; color: #8b949e; margin-bottom: 14px;">
-            How do the selected playing XIs compare? Based on career stats of the 11 players.
+            How do the selected squads compare? Based on the XI, adjusted for the projected impact substitute in the innings where that rule is most likely to matter.
         </div>
     """, unsafe_allow_html=True)
 
