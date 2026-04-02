@@ -19,3 +19,9 @@ catboost_info/
 # OS
 .DS_Store
 Thumbs.db
+
+.firecrawl/
+.streamlit/playing_xi_presets.json
+.streamlit/ipl2026_app.db
+.streamlit/ipl2026_app.db-shm
+.streamlit/ipl2026_app.db-wal

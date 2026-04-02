@@ -6,8 +6,14 @@ Requires: trained model artifacts in Models/ (run training.ipynb first)
 """
 
 import os
+import re
+import html
 import json
 import pickle
+import sqlite3
+import hashlib
+import secrets
+from datetime import datetime
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -15,6 +21,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from collections import defaultdict
 from difflib import SequenceMatcher
+from textwrap import dedent
 
 # ============================================================
 # Page Config
@@ -125,8 +132,472 @@ st.markdown("""
         font-weight: 600;
         color: #e6edf3;
     }
+    .page-section-title {
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #e6edf3;
+        margin-bottom: 4px;
+    }
+    .page-section-subtitle {
+        color: #8b949e;
+        font-size: 0.92rem;
+        margin-bottom: 14px;
+    }
+    .match-overview {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 10px 0 18px;
+    }
+    .match-chip {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 12px 14px;
+    }
+    .match-chip-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.9px;
+        color: #8b949e;
+        margin-bottom: 6px;
+    }
+    .match-chip-value {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #e6edf3;
+        line-height: 1.35;
+    }
+    .selector-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin: 12px 0 14px;
+    }
+    .selector-stat {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 12px 14px;
+    }
+    .selector-stat-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.85px;
+        color: #8b949e;
+        margin-bottom: 6px;
+    }
+    .selector-stat-value {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #e6edf3;
+        line-height: 1.35;
+    }
+    .section-kicker {
+        color: #8b949e;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 6px;
+    }
+    @media (max-width: 900px) {
+        .match-overview,
+        .selector-stats {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
+
+APP_DB_PATH = ".streamlit/ipl2026_app.db"
+PASSWORD_HASH_ROUNDS = 200_000
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,24}$")
+
+
+def current_timestamp():
+    """Return a consistent local timestamp for saved app records."""
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def get_db_connection():
+    """Open the local app database with row access."""
+    os.makedirs(os.path.dirname(APP_DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(APP_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def init_app_database():
+    """Create local tables for auth, saved XIs, and prediction history."""
+    with get_db_connection() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS xi_combinations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                team_code TEXT NOT NULL,
+                team_name TEXT NOT NULL,
+                combo_name TEXT NOT NULL,
+                playing_xi_json TEXT NOT NULL,
+                impact_player TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, team_code, combo_name),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS prediction_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                team1_name TEXT NOT NULL,
+                team1_code TEXT NOT NULL,
+                team2_name TEXT NOT NULL,
+                team2_code TEXT NOT NULL,
+                venue TEXT NOT NULL,
+                toss_winner TEXT NOT NULL,
+                toss_decision TEXT NOT NULL,
+                team1_xi_json TEXT NOT NULL,
+                team2_xi_json TEXT NOT NULL,
+                team1_impact TEXT,
+                team2_impact TEXT,
+                winner_name TEXT NOT NULL,
+                winner_code TEXT NOT NULL,
+                winner_prob REAL NOT NULL,
+                team1_prob REAL NOT NULL,
+                team2_prob REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_xi_combinations_user_team
+            ON xi_combinations(user_id, team_code, updated_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_prediction_history_user_time
+            ON prediction_history(user_id, created_at DESC);
+            """
+        )
+
+
+def ensure_app_session_state():
+    """Seed Streamlit session keys used by auth and flash messages."""
+    st.session_state.setdefault("auth_user", None)
+
+
+def set_flash_message(kind, message):
+    """Store a one-shot UI message for the next rerun."""
+    st.session_state["flash_message"] = {"kind": kind, "message": message}
+
+
+def render_flash_message():
+    """Render and clear the latest flash message, if any."""
+    flash = st.session_state.pop("flash_message", None)
+    if not flash:
+        return
+    getattr(st, flash["kind"], st.info)(flash["message"])
+
+
+def normalize_username(username):
+    """Normalize usernames for storage and lookup."""
+    return username.strip().lower()
+
+
+def hash_password(password, salt_hex):
+    """Derive a password hash using PBKDF2."""
+    return hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(salt_hex),
+        PASSWORD_HASH_ROUNDS,
+    ).hex()
+
+
+def validate_new_user(username, password, confirm_password):
+    """Validate a new account payload before inserting it."""
+    normalized = normalize_username(username)
+    if not USERNAME_PATTERN.fullmatch(normalized):
+        return "Username must be 3-24 characters and use only letters, numbers, ., _, or -."
+    if len(password) < 6:
+        return "Password must be at least 6 characters."
+    if password != confirm_password:
+        return "Passwords do not match."
+    return None
+
+
+def register_user(username, password):
+    """Create a local user account and return the saved identity."""
+    normalized = normalize_username(username)
+    salt_hex = secrets.token_hex(16)
+    password_hash = hash_password(password, salt_hex)
+    created_at = current_timestamp()
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO users (username, password_hash, salt, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (normalized, password_hash, salt_hex, created_at),
+            )
+        return {"id": cursor.lastrowid, "username": normalized}, None
+    except sqlite3.IntegrityError:
+        return None, "That username is already registered on this device."
+
+
+def authenticate_user(username, password):
+    """Validate local credentials and return the account record."""
+    normalized = normalize_username(username)
+    with get_db_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, username, password_hash, salt
+            FROM users
+            WHERE username = ?
+            """,
+            (normalized,),
+        ).fetchone()
+
+    if not row:
+        return None
+
+    candidate_hash = hash_password(password, row["salt"])
+    if not secrets.compare_digest(candidate_hash, row["password_hash"]):
+        return None
+
+    return {"id": row["id"], "username": row["username"]}
+
+
+def save_xi_combination(user_id, team_code, team_name, combo_name, playing_xi, impact_player):
+    """Insert or update a named Playing XI combination for a user."""
+    combo_name = combo_name.strip()
+    timestamp = current_timestamp()
+
+    with get_db_connection() as conn:
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM xi_combinations
+            WHERE user_id = ? AND team_code = ? AND combo_name = ?
+            """,
+            (user_id, team_code, combo_name),
+        ).fetchone()
+
+        conn.execute(
+            """
+            INSERT INTO xi_combinations (
+                user_id, team_code, team_name, combo_name,
+                playing_xi_json, impact_player, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, team_code, combo_name)
+            DO UPDATE SET
+                team_name = excluded.team_name,
+                playing_xi_json = excluded.playing_xi_json,
+                impact_player = excluded.impact_player,
+                updated_at = excluded.updated_at
+            """,
+            (
+                user_id,
+                team_code,
+                team_name,
+                combo_name,
+                json.dumps(playing_xi, ensure_ascii=False),
+                impact_player,
+                timestamp,
+                timestamp,
+            ),
+        )
+
+    return "updated" if existing else "saved"
+
+
+def list_user_xi_combinations(user_id, team_code=None):
+    """Return saved XI combinations for the current user."""
+    if not user_id:
+        return []
+
+    query = """
+        SELECT id, team_code, team_name, combo_name,
+               playing_xi_json, impact_player, created_at, updated_at
+        FROM xi_combinations
+        WHERE user_id = ?
+    """
+    params = [user_id]
+    if team_code:
+        query += " AND team_code = ?"
+        params.append(team_code)
+    query += " ORDER BY updated_at DESC, combo_name ASC"
+
+    with get_db_connection() as conn:
+        rows = conn.execute(query, params).fetchall()
+
+    combinations = []
+    for row in rows:
+        try:
+            playing_xi = json.loads(row["playing_xi_json"])
+        except json.JSONDecodeError:
+            playing_xi = []
+        combinations.append(
+            {
+                "id": row["id"],
+                "team_code": row["team_code"],
+                "team_name": row["team_name"],
+                "combo_name": row["combo_name"],
+                "playing_xi": playing_xi,
+                "impact_player": row["impact_player"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        )
+    return combinations
+
+
+def get_user_xi_combinations_for_team(user_id, team_code, squad):
+    """Return saved combinations, annotated for the current squad."""
+    combinations = list_user_xi_combinations(user_id, team_code=team_code)
+    enriched = []
+
+    for combo in combinations:
+        filtered_xi = [player for player in combo["playing_xi"] if player in squad][:11]
+        missing_players = [player for player in combo["playing_xi"] if player not in squad]
+        valid_impact = combo["impact_player"]
+        if valid_impact not in squad or valid_impact in filtered_xi:
+            valid_impact = None
+
+        enriched.append(
+            {
+                **combo,
+                "filtered_xi": filtered_xi,
+                "missing_players": missing_players,
+                "valid_impact_player": valid_impact,
+            }
+        )
+
+    return enriched
+
+
+def load_combination_into_state(xi_widget_key, selected_display, impact_widget_key, impact_display, combo_name_key, combo_name):
+    """Load a saved XI combination into the active widget state."""
+    st.session_state[xi_widget_key] = selected_display
+    st.session_state[impact_widget_key] = impact_display
+    st.session_state[combo_name_key] = combo_name
+
+
+def save_prediction_history(user_id, prediction_payload):
+    """Persist a logged-in user's prediction and selected squads."""
+    with get_db_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO prediction_history (
+                user_id, team1_name, team1_code, team2_name, team2_code,
+                venue, toss_winner, toss_decision,
+                team1_xi_json, team2_xi_json, team1_impact, team2_impact,
+                winner_name, winner_code, winner_prob,
+                team1_prob, team2_prob, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                prediction_payload["team1_name"],
+                prediction_payload["team1_code"],
+                prediction_payload["team2_name"],
+                prediction_payload["team2_code"],
+                prediction_payload["venue"],
+                prediction_payload["toss_winner"],
+                prediction_payload["toss_decision"],
+                json.dumps(prediction_payload["team1_xi"], ensure_ascii=False),
+                json.dumps(prediction_payload["team2_xi"], ensure_ascii=False),
+                prediction_payload["team1_impact"],
+                prediction_payload["team2_impact"],
+                prediction_payload["winner_name"],
+                prediction_payload["winner_code"],
+                float(prediction_payload["winner_prob"]),
+                float(prediction_payload["team1_prob"]),
+                float(prediction_payload["team2_prob"]),
+                current_timestamp(),
+            ),
+        )
+
+
+def get_user_prediction_history(user_id, limit=20):
+    """Return the most recent saved predictions for a user."""
+    if not user_id:
+        return []
+
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM prediction_history
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+
+    history = []
+    for row in rows:
+        try:
+            team1_xi = json.loads(row["team1_xi_json"])
+        except json.JSONDecodeError:
+            team1_xi = []
+        try:
+            team2_xi = json.loads(row["team2_xi_json"])
+        except json.JSONDecodeError:
+            team2_xi = []
+
+        history.append(
+            {
+                "id": row["id"],
+                "team1_name": row["team1_name"],
+                "team1_code": row["team1_code"],
+                "team2_name": row["team2_name"],
+                "team2_code": row["team2_code"],
+                "venue": row["venue"],
+                "toss_winner": row["toss_winner"],
+                "toss_decision": row["toss_decision"],
+                "team1_xi": team1_xi,
+                "team2_xi": team2_xi,
+                "team1_impact": row["team1_impact"],
+                "team2_impact": row["team2_impact"],
+                "winner_name": row["winner_name"],
+                "winner_code": row["winner_code"],
+                "winner_prob": row["winner_prob"],
+                "team1_prob": row["team1_prob"],
+                "team2_prob": row["team2_prob"],
+                "created_at": row["created_at"],
+            }
+        )
+    return history
+
+
+def get_user_dashboard_counts(user_id):
+    """Return quick counts for saved predictions and XI combinations."""
+    if not user_id:
+        return {"predictions": 0, "combinations": 0}
+
+    with get_db_connection() as conn:
+        prediction_count = conn.execute(
+            "SELECT COUNT(*) FROM prediction_history WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()[0]
+        combination_count = conn.execute(
+            "SELECT COUNT(*) FROM xi_combinations WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()[0]
+
+    return {"predictions": prediction_count, "combinations": combination_count}
 
 # ============================================================
 # Team Data
@@ -490,6 +961,280 @@ def format_player_role_text(name, full_to_cricsheet, all_cricsheet_names, player
         lifetime_stats,
     )
     return f"{ROLE_ICONS[role]} {ROLE_LABELS[role]}"
+
+
+def render_account_sidebar():
+    """Render login/register controls and return the active user."""
+    current_user = st.session_state.get("auth_user")
+
+    with st.sidebar:
+        st.header("Account")
+        st.caption("Predictions and Playing XI combinations are saved per account on this device.")
+
+        if current_user:
+            counts = get_user_dashboard_counts(current_user["id"])
+            st.success(f"Logged in as @{current_user['username']}")
+            st.caption(f"{counts['predictions']} predictions · {counts['combinations']} XI combinations")
+
+            if st.button("Logout", key="logout_button", use_container_width=True):
+                st.session_state["auth_user"] = None
+                set_flash_message("info", "You have been logged out.")
+                st.rerun()
+        else:
+            auth_mode = st.radio(
+                "Access",
+                ["Login", "Register"],
+                key="auth_mode",
+                horizontal=True,
+            )
+
+            if auth_mode == "Login":
+                with st.form("login_form", clear_on_submit=False):
+                    username = st.text_input("Username", key="login_username")
+                    password = st.text_input("Password", type="password", key="login_password")
+                    login_submitted = st.form_submit_button("Login", use_container_width=True)
+
+                if login_submitted:
+                    user = authenticate_user(username, password)
+                    if user:
+                        st.session_state["auth_user"] = user
+                        set_flash_message("success", f"Welcome back, @{user['username']}.")
+                        st.rerun()
+                    else:
+                        st.error("Invalid username or password.")
+            else:
+                with st.form("register_form", clear_on_submit=True):
+                    username = st.text_input("Username", key="register_username")
+                    password = st.text_input("Password", type="password", key="register_password")
+                    confirm_password = st.text_input("Confirm Password", type="password", key="register_confirm_password")
+                    register_submitted = st.form_submit_button("Create Account", use_container_width=True)
+
+                if register_submitted:
+                    validation_error = validate_new_user(username, password, confirm_password)
+                    if validation_error:
+                        st.error(validation_error)
+                    else:
+                        user, error_message = register_user(username, password)
+                        if error_message:
+                            st.error(error_message)
+                        else:
+                            st.session_state["auth_user"] = user
+                            set_flash_message("success", f"Account created for @{user['username']}.")
+                            st.rerun()
+
+    return st.session_state.get("auth_user")
+
+
+def render_user_dashboard(current_user):
+    """Show saved predictions and XI combinations for the signed-in user."""
+    st.subheader("My Dashboard")
+
+    if not current_user:
+        st.info("Login from the sidebar to save predictions, keep multiple Playing XI combinations, and access them later.")
+        return
+
+    counts = get_user_dashboard_counts(current_user["id"])
+    metric_col1, metric_col2 = st.columns(2)
+    metric_col1.metric("Saved Predictions", counts["predictions"])
+    metric_col2.metric("Saved XI Combinations", counts["combinations"])
+
+    saved_combinations = list_user_xi_combinations(current_user["id"])
+    prediction_history = get_user_prediction_history(current_user["id"], limit=15)
+
+    st.markdown("#### Saved Playing XI Combinations")
+    if saved_combinations:
+        for team_name, team_code in TEAMS.items():
+            team_combinations = [combo for combo in saved_combinations if combo["team_code"] == team_code]
+            if not team_combinations:
+                continue
+
+            with st.expander(f"{team_name} · {len(team_combinations)} saved combination(s)", expanded=False):
+                for combo in team_combinations:
+                    impact_text = combo["impact_player"] or "None"
+                    st.markdown(f"**{combo['combo_name']}**")
+                    st.caption(f"Updated {combo['updated_at']} · Impact player: {impact_text}")
+                    st.write(", ".join(combo["playing_xi"]) if combo["playing_xi"] else "No players saved.")
+    else:
+        st.info("No Playing XI combinations saved yet.")
+
+    st.markdown("#### Recent Predictions")
+    if prediction_history:
+        for prediction in prediction_history:
+            title = (
+                f"{prediction['created_at']} · "
+                f"{prediction['team1_code']} vs {prediction['team2_code']} · "
+                f"{prediction['winner_code']} {prediction['winner_prob']:.1%}"
+            )
+            with st.expander(title, expanded=False):
+                summary_col1, summary_col2, summary_col3 = st.columns(3)
+                summary_col1.metric("Winner", prediction["winner_name"])
+                summary_col2.metric(prediction["team1_code"], f"{prediction['team1_prob']:.1%}")
+                summary_col3.metric(prediction["team2_code"], f"{prediction['team2_prob']:.1%}")
+
+                st.caption(
+                    f"Venue: {prediction['venue']} · Toss: {prediction['toss_winner']} chose to {prediction['toss_decision']}"
+                )
+
+                xi_col1, xi_col2 = st.columns(2)
+                with xi_col1:
+                    st.markdown(f"**{prediction['team1_name']} XI**")
+                    st.write(", ".join(prediction["team1_xi"]) if prediction["team1_xi"] else "No XI saved.")
+                    st.caption(f"Impact player: {prediction['team1_impact'] or 'None'}")
+                with xi_col2:
+                    st.markdown(f"**{prediction['team2_name']} XI**")
+                    st.write(", ".join(prediction["team2_xi"]) if prediction["team2_xi"] else "No XI saved.")
+                    st.caption(f"Impact player: {prediction['team2_impact'] or 'None'}")
+    else:
+        st.info("No saved predictions yet. Run a prediction while logged in and it will appear here.")
+
+
+def render_all_squads_browser():
+    """Render all 2026 squads with the same role and overseas markers used in selectors."""
+    st.subheader("All IPL 2026 Squads")
+    st.caption("Role and overseas markers follow the same player metadata and stat heuristics used in the Playing XI selectors.")
+
+    squad_cols = st.columns(2)
+    for idx, (team_name, team_code) in enumerate(TEAMS.items()):
+        squad = SQUADS_2026.get(team_code, [])
+        overseas_set = OVERSEAS_PLAYERS.get(team_code, set())
+        formatted_players = [
+            format_player_option_label(
+                player,
+                overseas_set,
+                full_to_cricsheet,
+                all_cricsheet_names,
+                player_meta_lookup,
+                ipl_stats,
+                lifetime_stats,
+            )
+            for player in squad
+        ]
+        escaped_players = "<br>".join(html.escape(player) for player in formatted_players)
+        overseas_count = sum(1 for player in squad if player in overseas_set)
+
+        with squad_cols[idx % 2]:
+            logo_path = f"{LOGO_DIR}/{team_code}.png"
+            logo_col, text_col = st.columns([0.28, 1.7])
+            if os.path.exists(logo_path):
+                logo_col.image(logo_path, width=50)
+            text_col.markdown(f"**{team_name}**")
+            text_col.caption(f"{team_code} · {len(squad)} players · {overseas_count} overseas")
+
+            st.markdown(
+                f"""
+                <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; line-height: 1.8;">
+                    {escaped_players}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+def format_saved_timestamp(timestamp):
+    """Return a human-friendly label for saved record timestamps."""
+    try:
+        return datetime.fromisoformat(timestamp).strftime("%d %b %Y, %I:%M %p")
+    except (TypeError, ValueError):
+        return timestamp or "Unknown time"
+
+
+def render_match_setup_controls(team_names, venues):
+    """Render the top-of-page match controls and return the current selection."""
+    st.markdown(
+        """
+        <div class="section-kicker">Prediction Workspace</div>
+        <div class="page-section-title">Match Setup</div>
+        <div class="page-section-subtitle">
+            Choose the teams, venue, and toss setup here, then build the two Playing XIs below.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    setup_col1, setup_col2, setup_col3, setup_col4 = st.columns(4)
+
+    with setup_col1:
+        with st.container(border=True):
+            st.markdown('<div class="match-chip-label">Team 1</div>', unsafe_allow_html=True)
+            team1_name = st.selectbox(
+                "Team 1",
+                team_names,
+                index=0,
+                key="match_team1",
+                label_visibility="collapsed",
+            )
+
+    with setup_col2:
+        with st.container(border=True):
+            st.markdown('<div class="match-chip-label">Team 2</div>', unsafe_allow_html=True)
+            default_team2_index = 1 if len(team_names) > 1 else 0
+            team2_name = st.selectbox(
+                "Team 2",
+                team_names,
+                index=default_team2_index,
+                key="match_team2",
+                label_visibility="collapsed",
+            )
+
+    with setup_col3:
+        with st.container(border=True):
+            st.markdown('<div class="match-chip-label">Venue</div>', unsafe_allow_html=True)
+            venue = st.selectbox(
+                "Venue",
+                venues,
+                key="match_venue",
+                label_visibility="collapsed",
+            )
+
+    with setup_col4:
+        with st.container(border=True):
+            st.markdown('<div class="match-chip-label">Toss</div>', unsafe_allow_html=True)
+            toss_winner = st.selectbox(
+                "Toss Winner",
+                [team1_name, team2_name],
+                key="match_toss_winner",
+                label_visibility="collapsed",
+            )
+            toss_decision = st.radio(
+                "Toss Decision",
+                ["field", "bat"],
+                key="match_toss_decision",
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+
+    if team1_name == team2_name:
+        st.warning("Please select two different teams.")
+        st.stop()
+
+    return team1_name, team2_name, venue, toss_winner, toss_decision
+
+
+def render_selector_summary(selected_count, overseas_count, indian_count, strategy_text):
+    """Render a compact summary row for a team selector."""
+    overseas_value = f"{overseas_count}/4"
+    if overseas_count > 4:
+        overseas_value = f"{overseas_count}/4 max exceeded"
+
+    st.markdown(
+        f"""
+        <div class="selector-stats">
+            <div class="selector-stat">
+                <div class="selector-stat-label">Playing XI</div>
+                <div class="selector-stat-value">{selected_count}/11 selected</div>
+            </div>
+            <div class="selector-stat">
+                <div class="selector-stat-label">Overseas Balance</div>
+                <div class="selector-stat-value">🌍 {overseas_value} · 🇮🇳 {indian_count} Indian</div>
+            </div>
+            <div class="selector-stat">
+                <div class="selector-stat-label">Impact Lens</div>
+                <div class="selector-stat-value">{html.escape(strategy_text)}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def normalize_team(name, alias_map):
@@ -857,6 +1602,9 @@ def predict_match(
 # ============================================================
 # Load everything
 # ============================================================
+init_app_database()
+ensure_app_session_state()
+
 if not os.path.exists("Models/xgb_model.pkl"):
     st.error("Model not found! Run `training.ipynb` first to train and save the model.")
     st.stop()
@@ -884,29 +1632,16 @@ if os.path.exists(squads_path):
 # ============================================================
 st.markdown('<p class="main-title">IPL 2026 Match Predictor</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">XGBoost ML Model trained on 18 seasons of IPL data (2008-2025)</p>', unsafe_allow_html=True)
+render_flash_message()
+current_user = render_account_sidebar()
 st.markdown("---")
 
 # ============================================================
-# UI — Match Setup (Sidebar)
+# UI — Match Setup
 # ============================================================
-with st.sidebar:
-    st.header("Match Setup")
-
-    team_names = list(TEAMS.keys())
-
-    team1_name = st.selectbox("Team 1", team_names, index=0)
-    team2_name = st.selectbox("Team 2", team_names, index=1)
-
-    if team1_name == team2_name:
-        st.warning("Please select two different teams.")
-        st.stop()
-
-    venue = st.selectbox("Venue", VENUES)
-    toss_winner = st.selectbox("Toss Winner", [team1_name, team2_name])
-    toss_decision = st.selectbox("Toss Decision", ["field", "bat"])
-
-    st.markdown("---")
-    st.caption("Select the Playing XI and projected impact player for each team.")
+team_names = list(TEAMS.keys())
+team1_name, team2_name, venue, toss_winner, toss_decision = render_match_setup_controls(team_names, VENUES)
+st.caption("Select the Playing XI and projected impact player for each team.")
 
 # ============================================================
 # UI — Playing XI Input
@@ -926,21 +1661,20 @@ overseas1 = OVERSEAS_PLAYERS.get(team1_code, set())
 overseas2 = OVERSEAS_PLAYERS.get(team2_code, set())
 
 
-def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_first, key_suffix):
-    """Render the Playing XI + impact player selector with overseas tracking."""
+def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_first, key_suffix, current_user):
+    """Render the Playing XI + impact player selector with user-saved combinations."""
     with col:
         logo_path = f"{LOGO_DIR}/{team_code}.png"
         c_logo, c_name = st.columns([0.3, 2])
         if os.path.exists(logo_path):
             c_logo.image(logo_path, width=55)
         c_name.subheader(team_name)
-        st.caption("Icons: 🏏 batter · 🎯 bowler · 🧰 all-rounder · 🌍 overseas")
+        st.caption("Role icons: 🏏 batter · 🎯 bowler · 🧰 all-rounder · 🌍 overseas")
 
         if squad:
-            # Format options: add flag for overseas players
-            display_options = [
-                format_player_option_label(
-                    p,
+            player_to_display = {
+                player: format_player_option_label(
+                    player,
                     overseas_set,
                     full_to_cricsheet,
                     all_cricsheet_names,
@@ -948,48 +1682,149 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
                     ipl_stats,
                     lifetime_stats,
                 )
-                for p in squad
-            ]
-            option_map = dict(zip(display_options, squad))  # display -> real name
+                for player in squad
+            }
+            display_options = list(player_to_display.values())
+            option_map = {label: player for player, label in player_to_display.items()}
 
+            xi_state_key = f"xi_{key_suffix}_select"
+            xi_team_state_key = f"xi_{key_suffix}_team"
+            impact_state_key = f"impact_{key_suffix}_select"
+            combo_select_key = f"combo_{key_suffix}_selected"
+            combo_name_key = f"combo_name_{key_suffix}"
+
+            saved_combinations = []
+            combo_lookup = {}
+            default_combo = None
+
+            if current_user:
+                raw_combinations = get_user_xi_combinations_for_team(current_user["id"], team_code, squad)
+                for combo in raw_combinations:
+                    combo_display = [
+                        player_to_display[player]
+                        for player in combo["filtered_xi"]
+                        if player in player_to_display
+                    ]
+                    impact_display = "None"
+                    if combo["valid_impact_player"]:
+                        impact_display = format_player_option_label(
+                            combo["valid_impact_player"],
+                            overseas_set,
+                            full_to_cricsheet,
+                            all_cricsheet_names,
+                            player_meta_lookup,
+                            ipl_stats,
+                            lifetime_stats,
+                        )
+
+                    label = combo["combo_name"]
+                    if combo["missing_players"]:
+                        label = f"{combo['combo_name']} · Needs update"
+
+                    saved_combinations.append(
+                        {
+                            **combo,
+                            "label": label,
+                            "display_xi": combo_display,
+                            "impact_display": impact_display,
+                            "updated_display": format_saved_timestamp(combo["updated_at"]),
+                        }
+                    )
+
+                combo_lookup = {combo["label"]: combo for combo in saved_combinations}
+                default_combo = saved_combinations[0] if saved_combinations else None
+
+            if st.session_state.get(xi_team_state_key) != team_code:
+                st.session_state[xi_team_state_key] = team_code
+                if default_combo:
+                    st.session_state[xi_state_key] = list(default_combo["display_xi"])
+                    st.session_state[impact_state_key] = default_combo["impact_display"]
+                    st.session_state[combo_select_key] = default_combo["label"]
+                    st.session_state[combo_name_key] = default_combo["combo_name"]
+                else:
+                    st.session_state[xi_state_key] = []
+                    st.session_state[impact_state_key] = "None"
+                    st.session_state[combo_name_key] = f"{team_code} XI 1"
+                    st.session_state.pop(combo_select_key, None)
+
+            st.session_state.setdefault(combo_name_key, default_combo["combo_name"] if default_combo else f"{team_code} XI 1")
+
+            if current_user:
+                if saved_combinations:
+                    with st.expander(f"Saved XI combinations ({len(saved_combinations)})", expanded=False):
+                        combo_col, load_col = st.columns([1.55, 0.95])
+                        with combo_col:
+                            selected_combo_label = st.selectbox(
+                                f"Saved combinations ({team_code})",
+                                options=[combo["label"] for combo in saved_combinations],
+                                key=combo_select_key,
+                                label_visibility="collapsed",
+                            )
+                        selected_combo = combo_lookup[selected_combo_label]
+                        with load_col:
+                            st.write("")
+                            st.write("")
+                            st.button(
+                                "Load",
+                                key=f"load_xi_{key_suffix}",
+                                use_container_width=True,
+                                on_click=load_combination_into_state,
+                                args=(
+                                    xi_state_key,
+                                    list(selected_combo["display_xi"]),
+                                    impact_state_key,
+                                    selected_combo["impact_display"],
+                                    combo_name_key,
+                                    selected_combo["combo_name"],
+                                ),
+                            )
+
+                        st.caption(
+                            f"Updated {selected_combo['updated_display']} · Impact player: {selected_combo['impact_player'] or 'None'}"
+                        )
+                        if selected_combo["missing_players"]:
+                            st.caption(
+                                "Needs update: "
+                                + ", ".join(selected_combo["missing_players"])
+                                + " not found in the current squad."
+                            )
+                else:
+                    st.caption("No saved XI combinations yet. Save one below once this team setup is ready.")
+            else:
+                st.caption("Login to save and reuse multiple XI combinations.")
+
+            st.markdown("##### Playing XI")
             selected_display = st.multiselect(
                 f"Select Playing XI ({team_code})",
                 options=display_options,
-                default=[],
                 max_selections=11,
-                key=f"xi_{key_suffix}_select",
+                key=xi_state_key,
+                label_visibility="collapsed",
             )
-            selected_real = [option_map[d] for d in selected_display]
+            selected_real = [option_map[label] for label in selected_display if label in option_map]
 
-            # Count overseas in selection
-            overseas_count = sum(1 for p in selected_real if p in overseas_set)
+            overseas_count = sum(1 for player in selected_real if player in overseas_set)
             indian_count = len(selected_real) - overseas_count
-
-            # Status line
-            status_parts = []
-            status_parts.append(f"{len(selected_real)}/11 players")
-            if overseas_count > 4:
-                status_parts.append(f"⚠️ {overseas_count}/4 overseas (max 4!)")
-            else:
-                status_parts.append(f"🌍 {overseas_count}/4 overseas")
-            status_parts.append(f"🇮🇳 {indian_count} Indian")
 
             if overseas_count > 4:
                 st.error(f"Too many overseas players! You selected {overseas_count} — maximum is 4.")
-            else:
-                st.caption(" · ".join(status_parts))
 
             strategy_text = "bowling impact while defending" if bats_first else "batting impact while chasing"
-            st.caption(f"Impact player model: {strategy_text}.")
+            render_selector_summary(len(selected_real), overseas_count, indian_count, strategy_text)
 
             if len(selected_real) != 11:
+                st.session_state[impact_state_key] = "Complete the Playing XI first"
+                st.markdown("##### Impact Player")
                 st.selectbox(
                     f"Projected Impact Player ({team_code})",
                     options=["Complete the Playing XI first"],
                     index=0,
                     disabled=True,
-                    key=f"impact_{key_suffix}_select",
+                    key=impact_state_key,
+                    label_visibility="collapsed",
                 )
+                if current_user:
+                    st.caption("Complete all 11 players to save or update a named combination.")
                 return selected_real, overseas_count, None
 
             recommended_player = recommend_impact_player(
@@ -1003,9 +1838,9 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
                 all_cricsheet_names,
             )
 
-            bench_players = [p for p in squad if p not in selected_real]
-            display_options = ["None"]
-            option_map = {"None": None}
+            bench_players = [player for player in squad if player not in selected_real]
+            impact_options = ["None"]
+            impact_option_map = {"None": None}
 
             for player in bench_players:
                 label = format_player_option_label(
@@ -1018,24 +1853,31 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
                     lifetime_stats,
                     recommended=(player == recommended_player),
                 )
-                display_options.append(label)
-                option_map[label] = player
+                impact_options.append(label)
+                impact_option_map[label] = player
 
             default_label = "None"
             if recommended_player:
                 default_label = next(
-                    (label for label, player in option_map.items() if player == recommended_player),
+                    (label for label, player in impact_option_map.items() if player == recommended_player),
                     "None",
                 )
 
+            current_impact_value = st.session_state.get(impact_state_key, default_label)
+            if current_impact_value not in impact_options:
+                st.session_state[impact_state_key] = default_label
+                current_impact_value = default_label
+
+            st.markdown("##### Impact Player")
             selected_impact_display = st.selectbox(
                 f"Projected Impact Player ({team_code})",
-                options=display_options,
-                index=display_options.index(default_label),
-                key=f"impact_{key_suffix}_select",
+                options=impact_options,
+                index=impact_options.index(current_impact_value),
+                key=impact_state_key,
                 help="One projected substitute from the bench. The app models this player as a batting boost while chasing or a bowling boost while defending.",
+                label_visibility="collapsed",
             )
-            selected_impact = option_map[selected_impact_display]
+            selected_impact = impact_option_map[selected_impact_display]
 
             if selected_impact and selected_impact in overseas_set and overseas_count >= 4:
                 st.error("Overseas impact player not allowed when the starting XI already has 4 overseas players.")
@@ -1048,8 +1890,43 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
                     ipl_stats,
                     lifetime_stats,
                 )
-                strategy_text = "bowling impact while defending" if bats_first else "batting impact while chasing"
                 st.caption(f"Projected impact player: {selected_impact} ({role_text}). Model context: {strategy_text}.")
+
+            if current_user:
+                st.markdown("##### Save or Update Combination")
+                save_name_col, save_button_col = st.columns([1.6, 1])
+                with save_name_col:
+                    combo_name = st.text_input(
+                        f"Combination name ({team_code})",
+                        key=combo_name_key,
+                        placeholder=f"{team_code} XI 1",
+                        help="Use different names to keep multiple Playing XI combinations for the same team.",
+                        label_visibility="collapsed",
+                    )
+                with save_button_col:
+                    st.write("")
+                    st.write("")
+                    if st.button(
+                        f"Save Combination ({team_code})",
+                        key=f"save_xi_{key_suffix}",
+                        use_container_width=True,
+                        disabled=not combo_name.strip(),
+                    ):
+                        action = save_xi_combination(
+                            current_user["id"],
+                            team_code,
+                            team_name,
+                            combo_name,
+                            selected_real,
+                            selected_impact,
+                        )
+                        set_flash_message(
+                            "success",
+                            f"{team_code} combination '{combo_name.strip()}' {action}.",
+                        )
+                        st.rerun()
+            else:
+                st.caption("Login to save this XI and projected impact-player combination.")
 
             return selected_real, overseas_count, selected_impact
         else:
@@ -1059,7 +1936,7 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
                 placeholder="Player 1\nPlayer 2\n...",
                 label_visibility="collapsed",
             )
-            xi = [n.strip() for n in xi_text.strip().split("\n") if n.strip()]
+            xi = [name.strip() for name in xi_text.strip().split("\n") if name.strip()]
             impact_text = st.text_input(
                 f"Projected Impact Player ({team_code})",
                 key=f"impact_{key_suffix}_text",
@@ -1069,10 +1946,10 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
 
 
 team1_xi, t1_overseas_count, team1_impact = render_xi_selector(
-    col_xi1, team1_name, team1_code, squad1, overseas1, team1_bats_first, "1"
+    col_xi1, team1_name, team1_code, squad1, overseas1, team1_bats_first, "1", current_user
 )
 team2_xi, t2_overseas_count, team2_impact = render_xi_selector(
-    col_xi2, team2_name, team2_code, squad2, overseas2, team2_bats_first, "2"
+    col_xi2, team2_name, team2_code, squad2, overseas2, team2_bats_first, "2", current_user
 )
 
 # ============================================================
@@ -1110,6 +1987,11 @@ if predict_clicked:
         for err in errors:
             st.error(err)
         st.stop()
+
+    entered_team1_xi = list(team1_xi)
+    entered_team2_xi = list(team2_xi)
+    entered_team1_impact = team1_impact
+    entered_team2_impact = team2_impact
 
     # --- Resolve player names ---
     # Convert full names (e.g. "Virat Kohli") to cricsheet format ("V Kohli")
@@ -1186,7 +2068,32 @@ if predict_clicked:
     winner_code = team1_code if t1_prob > 0.5 else team2_code
     winner_prob = max(t1_prob, t2_prob)
 
+    if current_user:
+        save_prediction_history(
+            current_user["id"],
+            {
+                "team1_name": team1_name,
+                "team1_code": team1_code,
+                "team2_name": team2_name,
+                "team2_code": team2_code,
+                "venue": venue,
+                "toss_winner": toss_winner,
+                "toss_decision": toss_decision,
+                "team1_xi": entered_team1_xi,
+                "team2_xi": entered_team2_xi,
+                "team1_impact": entered_team1_impact,
+                "team2_impact": entered_team2_impact,
+                "winner_name": winner_name,
+                "winner_code": winner_code,
+                "winner_prob": winner_prob,
+                "team1_prob": t1_prob,
+                "team2_prob": t2_prob,
+            },
+        )
+
     st.markdown("---")
+    if current_user:
+        st.success("Prediction saved to your account history.")
 
     # --- Winner Announcement ---
     st.markdown(f"""
@@ -1220,6 +2127,7 @@ if predict_clicked:
             phase_label = "Bowling swap while defending" if profile["strategy"] == "bowling" else "Batting swap while chasing"
             impact_name = profile["impact_player"] or "No impact player selected"
             role_text = None
+            swap_html = ""
             if profile["impact_player"]:
                 role_text = format_player_role_text(
                     profile["impact_player"],
@@ -1232,6 +2140,18 @@ if predict_clicked:
 
             if profile["used"]:
                 phase_profile = profile[phase_key]
+                swap_html = dedent(f"""
+                <div style="margin-top: 10px; padding: 10px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px;">
+                    <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.9px; color: #8b949e; margin-bottom: 6px;">
+                        Projected Substitution
+                    </div>
+                    <div style="font-size: 0.92rem; color: #e6edf3; font-weight: 600;">
+                        <span style="color: #3fb950;">IN:</span> {impact_name}
+                        <span style="color: #8b949e; margin: 0 10px;">|</span>
+                        <span style="color: #f85149;">OUT:</span> {phase_profile['replaced_player']}
+                    </div>
+                </div>
+                """).strip()
                 if profile["strategy"] == "bowling":
                     delta_text = (
                         f"Bowling economy {profile['baseline']['bowling_econ']:.2f} -> "
@@ -1245,11 +2165,20 @@ if predict_clicked:
                 body_text = (
                     f"Selected player: {impact_name}"
                     f"{f' ({role_text})' if role_text else ''}. "
-                    f"{impact_name} replaces {phase_profile['replaced_player']} in the projected "
-                    f"{phase_label.lower()} scenario. {delta_text}."
+                    f"Projected in the {phase_label.lower()} scenario. {delta_text}."
                 )
                 tone_color = "#58a6ff"
             elif profile["impact_player"]:
+                swap_html = dedent("""
+                <div style="margin-top: 10px; padding: 10px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px;">
+                    <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.9px; color: #8b949e; margin-bottom: 6px;">
+                        Projected Substitution
+                    </div>
+                    <div style="font-size: 0.9rem; color: #8b949e;">
+                        No swap projected. Baseline XI retained.
+                    </div>
+                </div>
+                """).strip()
                 body_text = (
                     f"Selected player: {impact_name}"
                     f"{f' ({role_text})' if role_text else ''}. "
@@ -1264,7 +2193,7 @@ if predict_clicked:
             st.markdown(f"""
             <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px; margin: 8px 0;">
                 <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: #8b949e;">
-                    {team_code} Impact Plan
+                    {team_name} Impact Plan
                 </div>
                 <div style="font-size: 1.05rem; font-weight: 700; color: {tone_color}; margin-top: 4px;">
                     {phase_label}
@@ -1272,6 +2201,7 @@ if predict_clicked:
                 <div style="font-size: 0.85rem; color: #e6edf3; margin-top: 8px;">
                     {body_text}
                 </div>
+                {swap_html}
             </div>
             """, unsafe_allow_html=True)
 
@@ -1676,6 +2606,20 @@ if predict_clicked:
     st.caption(f"*{exp_text} (Average IPL matches played per player in the XI.)*")
 
     st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("---")
+st.markdown('<div class="section-kicker">Saved Data</div>', unsafe_allow_html=True)
+st.markdown('<div class="page-section-title">Account Workspace</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="page-section-subtitle">Review saved predictions, manage your reusable Playing XI combinations, and browse all current team squads.</div>',
+    unsafe_allow_html=True,
+)
+
+dashboard_tab, squads_tab = st.tabs(["My Dashboard", "All Squads"])
+with dashboard_tab:
+    render_user_dashboard(current_user)
+with squads_tab:
+    render_all_squads_browser()
 
 # ============================================================
 # Footer
