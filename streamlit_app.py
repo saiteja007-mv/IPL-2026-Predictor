@@ -420,6 +420,19 @@ def save_xi_combination(user_id, team_code, team_name, combo_name, playing_xi, i
     return "updated" if existing else "saved"
 
 
+def delete_xi_combination(user_id, combination_id):
+    """Delete a saved XI combination owned by the current user."""
+    with get_db_connection() as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM xi_combinations
+            WHERE id = ? AND user_id = ?
+            """,
+            (combination_id, user_id),
+        )
+    return cursor.rowcount > 0
+
+
 def list_user_xi_combinations(user_id, team_code=None):
     """Return saved XI combinations for the current user."""
     if not user_id:
@@ -527,6 +540,19 @@ def save_prediction_history(user_id, prediction_payload):
                 current_timestamp(),
             ),
         )
+
+
+def delete_prediction_history_entry(user_id, prediction_id):
+    """Delete a saved prediction owned by the current user."""
+    with get_db_connection() as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM prediction_history
+            WHERE id = ? AND user_id = ?
+            """,
+            (prediction_id, user_id),
+        )
+    return cursor.rowcount > 0
 
 
 def get_user_prediction_history(user_id, limit=20):
@@ -658,7 +684,7 @@ OVERSEAS_PLAYERS = {
     "RCB": {"Phil Salt", "Tim David", "Romario Shepherd", "Jacob Bethell", "Josh Hazlewood", "Nuwan Thushara", "Jacob Duffy", "Jordan Cox"},
     "KKR": {"Rovman Powell", "Sunil Narine", "Cameron Green", "Finn Allen", "Matheesha Pathirana", "Tim Seifert", "Rachin Ravindra", "Blessing Muzarabani"},
     "DC": {"Dushmantha Chameera", "Mitchell Starc", "Tristan Stubbs", "David Miller", "Ben Duckett", "Pathum Nissanka", "Lungi Ngidi", "Kyle Jamieson"},
-    "SRH": {"Pat Cummins", "Travis Head", "Heinrich Klaasen", "Kamindu Mendis", "Brydon Carse", "Liam Livingstone", "Jack Edwards"},
+    "SRH": {"Pat Cummins", "Travis Head", "Heinrich Klaasen", "Kamindu Mendis", "Brydon Carse", "Liam Livingstone", "David Payne"},
     "RR": {"Sam Curran", "Donovan Ferreira", "Lhuan-Dre Pretorius", "Shimron Hetmyer", "Jofra Archer", "Kwena Maphaka", "Nandre Burger", "Adam Milne"},
     "PK": {"Marcus Stoinis", "Azmatullah Omarzai", "Marco Jansen", "Mitchell Owen", "Xavier Bartlett", "Lockie Ferguson", "Cooper Connolly", "Ben Dwarshuis"},
     "LSG": {"Aiden Markram", "Matthew Breetzke", "Nicholas Pooran", "Mitchell Marsh", "Wanindu Hasaranga", "Anrich Nortje", "Josh Inglis"},
@@ -666,6 +692,27 @@ OVERSEAS_PLAYERS = {
 }
 
 LOGO_DIR = "IPL Team logos/processed"
+
+MANUAL_PLAYER_STATS_OVERRIDES = {
+    # Official IPL profile describes David Payne as an overseas bowler with 230+ T20 appearances.
+    "David Payne": {
+        "batting_sr": 85.0,
+        "bowling_econ": 8.0,
+        "experience": 233.0,
+        "avg_runs": 6.0,
+        "batting_innings": 35.0,
+        "bowling_innings": 233.0,
+        "balls_bowled": 5592.0,
+        "wickets": 304.0,
+    },
+}
+
+MANUAL_PLAYER_META_OVERRIDES = {
+    "david payne": {
+        "bat_style": "Right hand Bat",
+        "bowl_style": "Left arm Medium fast",
+    },
+}
 
 
 # ============================================================
@@ -719,6 +766,9 @@ def load_player_stats():
             "balls_bowled": row["overall_balls_bowled"] if pd.notna(row["overall_balls_bowled"]) else 0,
             "wickets": row["overall_wickets"] if pd.notna(row["overall_wickets"]) else 0,
         }
+
+    for player_name, stats in MANUAL_PLAYER_STATS_OVERRIDES.items():
+        lifetime[player_name] = stats.copy()
 
     return ipl_stats, lifetime
 
@@ -815,6 +865,7 @@ def build_player_meta_lookup(players_meta):
                 "bowl_style": bowl_style,
             }
 
+    lookup.update(MANUAL_PLAYER_META_OVERRIDES)
     return lookup
 
 
@@ -1051,9 +1102,30 @@ def render_user_dashboard(current_user):
             with st.expander(f"{team_name} · {len(team_combinations)} saved combination(s)", expanded=False):
                 for combo in team_combinations:
                     impact_text = combo["impact_player"] or "None"
-                    st.markdown(f"**{combo['combo_name']}**")
-                    st.caption(f"Updated {combo['updated_at']} · Impact player: {impact_text}")
+                    combo_info_col, combo_delete_col = st.columns([4.5, 1.1])
+                    with combo_info_col:
+                        st.markdown(f"**{combo['combo_name']}**")
+                        st.caption(
+                            f"Updated {format_saved_timestamp(combo['updated_at'])} · Impact player: {impact_text}"
+                        )
+                    with combo_delete_col:
+                        st.write("")
+                        if st.button(
+                            "Delete",
+                            key=f"delete_combo_dashboard_{combo['id']}",
+                            use_container_width=True,
+                        ):
+                            if delete_xi_combination(current_user["id"], combo["id"]):
+                                set_flash_message(
+                                    "success",
+                                    f"Deleted XI combination '{combo['combo_name']}'.",
+                                )
+                            else:
+                                set_flash_message("warning", "Could not delete that XI combination.")
+                            st.rerun()
+
                     st.write(", ".join(combo["playing_xi"]) if combo["playing_xi"] else "No players saved.")
+                    st.markdown("---")
     else:
         st.info("No Playing XI combinations saved yet.")
 
@@ -1072,7 +1144,7 @@ def render_user_dashboard(current_user):
                 summary_col3.metric(prediction["team2_code"], f"{prediction['team2_prob']:.1%}")
 
                 st.caption(
-                    f"Venue: {prediction['venue']} · Toss: {prediction['toss_winner']} chose to {prediction['toss_decision']}"
+                    f"Saved {format_saved_timestamp(prediction['created_at'])} · Venue: {prediction['venue']} · Toss: {prediction['toss_winner']} chose to {prediction['toss_decision']}"
                 )
 
                 xi_col1, xi_col2 = st.columns(2)
@@ -1084,6 +1156,19 @@ def render_user_dashboard(current_user):
                     st.markdown(f"**{prediction['team2_name']} XI**")
                     st.write(", ".join(prediction["team2_xi"]) if prediction["team2_xi"] else "No XI saved.")
                     st.caption(f"Impact player: {prediction['team2_impact'] or 'None'}")
+
+                delete_prediction_col = st.columns([3.6, 1])[1]
+                with delete_prediction_col:
+                    if st.button(
+                        "Delete Prediction",
+                        key=f"delete_prediction_{prediction['id']}",
+                        use_container_width=True,
+                    ):
+                        if delete_prediction_history_entry(current_user["id"], prediction["id"]):
+                            set_flash_message("success", "Deleted saved prediction.")
+                        else:
+                            set_flash_message("warning", "Could not delete that saved prediction.")
+                        st.rerun()
     else:
         st.info("No saved predictions yet. Run a prediction while logged in and it will appear here.")
 
@@ -1752,7 +1837,7 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
             if current_user:
                 if saved_combinations:
                     with st.expander(f"Saved XI combinations ({len(saved_combinations)})", expanded=False):
-                        combo_col, load_col = st.columns([1.55, 0.95])
+                        combo_col, load_col, delete_col = st.columns([1.45, 0.75, 0.8])
                         with combo_col:
                             selected_combo_label = st.selectbox(
                                 f"Saved combinations ({team_code})",
@@ -1778,6 +1863,22 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
                                     selected_combo["combo_name"],
                                 ),
                             )
+                        with delete_col:
+                            st.write("")
+                            st.write("")
+                            if st.button(
+                                "Delete",
+                                key=f"delete_combo_selector_{selected_combo['id']}",
+                                use_container_width=True,
+                            ):
+                                if delete_xi_combination(current_user["id"], selected_combo["id"]):
+                                    set_flash_message(
+                                        "success",
+                                        f"Deleted XI combination '{selected_combo['combo_name']}'.",
+                                    )
+                                else:
+                                    set_flash_message("warning", "Could not delete that XI combination.")
+                                st.rerun()
 
                         st.caption(
                             f"Updated {selected_combo['updated_display']} · Impact player: {selected_combo['impact_player'] or 'None'}"
