@@ -16,6 +16,9 @@ Datasets/cricsheet_cache/
 # CatBoost artifacts
 catboost_info/
 
+# Supabase / Streamlit secrets (never commit real credentials)
+.streamlit/secrets.toml
+
 # OS
 .DS_Store
 Thumbs.db
