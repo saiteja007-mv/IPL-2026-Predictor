@@ -8,6 +8,7 @@ Requires: trained model artifacts in Models/ (run training.ipynb first)
 import os
 import json
 import pickle
+import datetime
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -15,6 +16,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from collections import defaultdict
 from difflib import SequenceMatcher
+from supabase import create_client, Client
 
 # ============================================================
 # Page Config
@@ -195,6 +197,43 @@ OVERSEAS_PLAYERS = {
 }
 
 LOGO_DIR = "IPL Team logos/processed"
+SUPPLEMENTAL_PROFILES_PATH = "Datasets/player_2026_supplemental_profiles.csv"
+
+DEFAULT_STATS = {
+    "batting_sr": 120.0,
+    "bowling_econ": 8.0,
+    "experience": 0,
+    "avg_runs": 20.0,
+    "batting_innings": 0,
+    "bowling_innings": 0,
+    "balls_bowled": 0,
+    "wickets": 0,
+}
+
+
+def iter_player_name_variants(short_name=None, full_name=None):
+    """Generate common lookup variants for a player name."""
+    variants = set()
+
+    for raw_name in (short_name, full_name):
+        if pd.notna(raw_name) and str(raw_name).strip():
+            variants.add(str(raw_name).strip())
+
+    if pd.notna(full_name) and str(full_name).strip():
+        parts = str(full_name).strip().split()
+        if len(parts) >= 2:
+            variants.add(f"{parts[0]} {parts[-1]}")
+        if len(parts) >= 3:
+            for mid in parts[1:-1]:
+                variants.add(f"{parts[0]} {mid}")
+                variants.add(f"{mid} {parts[-1]}")
+            for start in range(1, len(parts) - 1):
+                variants.add(" ".join(parts[start:]))
+        if len(parts) >= 4:
+            for i in range(len(parts) - 1):
+                variants.add(f"{parts[i]} {parts[i+1]}")
+
+    return sorted(v.strip() for v in variants if v and v.strip())
 
 
 # ============================================================
@@ -222,32 +261,105 @@ def load_player_stats():
     """Load player stats for lookup."""
     player_ipl = pd.read_csv("Datasets/player_ipl_stats.csv")
     player_lifetime = pd.read_csv("Datasets/player_lifetime_stats.csv")
+    supplemental_profiles = (
+        pd.read_csv(SUPPLEMENTAL_PROFILES_PATH) if os.path.exists(SUPPLEMENTAL_PROFILES_PATH) else pd.DataFrame()
+    )
+
+    def build_stats_payload(
+        batting_sr,
+        bowling_econ,
+        experience,
+        avg_runs,
+        batting_innings,
+        bowling_innings,
+        balls_bowled,
+        wickets,
+        use_defaults=False,
+    ):
+        if use_defaults:
+            return {
+                "batting_sr": DEFAULT_STATS["batting_sr"],
+                "bowling_econ": DEFAULT_STATS["bowling_econ"],
+                "experience": experience,
+                "avg_runs": DEFAULT_STATS["avg_runs"],
+                "batting_innings": batting_innings,
+                "bowling_innings": bowling_innings,
+                "balls_bowled": balls_bowled,
+                "wickets": wickets,
+            }
+
+        return {
+            "batting_sr": batting_sr if pd.notna(batting_sr) else 0,
+            "bowling_econ": bowling_econ if pd.notna(bowling_econ) else 0,
+            "experience": experience if pd.notna(experience) else 0,
+            "avg_runs": avg_runs if pd.notna(avg_runs) else 0,
+            "batting_innings": batting_innings if pd.notna(batting_innings) else 0,
+            "bowling_innings": bowling_innings if pd.notna(bowling_innings) else 0,
+            "balls_bowled": balls_bowled if pd.notna(balls_bowled) else 0,
+            "wickets": wickets if pd.notna(wickets) else 0,
+        }
+
+    def attach_stats(store, short_name, full_name, stats):
+        for alias in iter_player_name_variants(short_name, full_name):
+            store[alias] = stats
 
     ipl_stats = {}
     for _, row in player_ipl.iterrows():
-        ipl_stats[row["player"]] = {
-            "batting_sr": row["batting_sr"] if pd.notna(row["batting_sr"]) else 0,
-            "bowling_econ": row["bowling_econ"] if pd.notna(row["bowling_econ"]) else 0,
-            "experience": row["ipl_experience"] if pd.notna(row["ipl_experience"]) else 0,
-            "avg_runs": row["avg_runs"] if pd.notna(row["avg_runs"]) else 0,
-            "batting_innings": row["matches_batted"] if pd.notna(row["matches_batted"]) else 0,
-            "bowling_innings": row["matches_bowled"] if pd.notna(row["matches_bowled"]) else 0,
-            "balls_bowled": row["balls_bowled"] if pd.notna(row["balls_bowled"]) else 0,
-            "wickets": row["wickets"] if pd.notna(row["wickets"]) else 0,
-        }
+        ipl_stats[row["player"]] = build_stats_payload(
+            row["batting_sr"],
+            row["bowling_econ"],
+            row["ipl_experience"],
+            row["avg_runs"],
+            row["matches_batted"],
+            row["matches_bowled"],
+            row["balls_bowled"],
+            row["wickets"],
+        )
 
     lifetime = {}
     for _, row in player_lifetime.iterrows():
-        lifetime[row["player_name"]] = {
-            "batting_sr": row["overall_batting_sr"] if pd.notna(row["overall_batting_sr"]) else 0,
-            "bowling_econ": row["overall_bowling_econ"] if pd.notna(row["overall_bowling_econ"]) else 0,
-            "experience": row["overall_matches"] if pd.notna(row["overall_matches"]) else 0,
-            "avg_runs": row["overall_batting_avg"] if pd.notna(row["overall_batting_avg"]) else 0,
-            "batting_innings": row["overall_batting_innings"] if pd.notna(row["overall_batting_innings"]) else 0,
-            "bowling_innings": row["overall_bowling_innings"] if pd.notna(row["overall_bowling_innings"]) else 0,
-            "balls_bowled": row["overall_balls_bowled"] if pd.notna(row["overall_balls_bowled"]) else 0,
-            "wickets": row["overall_wickets"] if pd.notna(row["overall_wickets"]) else 0,
-        }
+        experience = row["overall_matches"] if pd.notna(row["overall_matches"]) else 0
+        batting_innings = row["overall_batting_innings"] if pd.notna(row["overall_batting_innings"]) else 0
+        bowling_innings = row["overall_bowling_innings"] if pd.notna(row["overall_bowling_innings"]) else 0
+        balls_bowled = row["overall_balls_bowled"] if pd.notna(row["overall_balls_bowled"]) else 0
+        wickets = row["overall_wickets"] if pd.notna(row["overall_wickets"]) else 0
+        avg_runs = row["overall_batting_avg"] if pd.notna(row["overall_batting_avg"]) else 0
+
+        has_real_sample = any(v > 0 for v in [experience, batting_innings, bowling_innings, balls_bowled, wickets, avg_runs])
+        stats = build_stats_payload(
+            row["overall_batting_sr"],
+            row["overall_bowling_econ"],
+            experience,
+            avg_runs,
+            batting_innings,
+            bowling_innings,
+            balls_bowled,
+            wickets,
+            use_defaults=not has_real_sample,
+        )
+        attach_stats(lifetime, row["player_name"], row.get("player_full_name"), stats)
+
+    for _, row in supplemental_profiles.iterrows():
+        experience = row["experience"] if "experience" in row and pd.notna(row["experience"]) else 0
+        batting_innings = row["batting_innings"] if "batting_innings" in row and pd.notna(row["batting_innings"]) else 0
+        bowling_innings = row["bowling_innings"] if "bowling_innings" in row and pd.notna(row["bowling_innings"]) else 0
+        balls_bowled = row["balls_bowled"] if "balls_bowled" in row and pd.notna(row["balls_bowled"]) else 0
+        wickets = row["wickets"] if "wickets" in row and pd.notna(row["wickets"]) else 0
+        avg_runs = row["avg_runs"] if "avg_runs" in row and pd.notna(row["avg_runs"]) else 0
+        placeholder = bool(row["is_placeholder"]) if "is_placeholder" in row and pd.notna(row["is_placeholder"]) else False
+
+        stats = build_stats_payload(
+            row["batting_sr"] if "batting_sr" in row else np.nan,
+            row["bowling_econ"] if "bowling_econ" in row else np.nan,
+            experience,
+            avg_runs,
+            batting_innings,
+            bowling_innings,
+            balls_bowled,
+            wickets,
+            use_defaults=placeholder,
+        )
+        attach_stats(lifetime, row["player_name"], row.get("player_full_name"), stats)
 
     return ipl_stats, lifetime
 
@@ -264,6 +376,10 @@ def build_name_resolver():
     3. Fuzzy match against all known names
     """
     meta = pd.read_csv("Datasets/players-data-updated.csv")
+    player_lifetime = pd.read_csv("Datasets/player_lifetime_stats.csv")
+    supplemental_profiles = (
+        pd.read_csv(SUPPLEMENTAL_PROFILES_PATH) if os.path.exists(SUPPLEMENTAL_PROFILES_PATH) else pd.DataFrame()
+    )
 
     # Map: lowercase full name -> cricsheet name
     # e.g. "virat kohli" -> "V Kohli"
@@ -272,33 +388,33 @@ def build_name_resolver():
         cricsheet = row["player_name"]
         full_name = row["player_full_name"]
         if pd.notna(full_name) and pd.notna(cricsheet):
-            # Map the full name exactly
-            full_to_cricsheet[full_name.strip().lower()] = cricsheet
+            for alias in iter_player_name_variants(cricsheet, full_name):
+                full_to_cricsheet[alias.lower()] = cricsheet
 
-            # Also map "FirstName LastName" combinations from multi-part names
-            # e.g. "Jasprit Jasbirsingh Bumrah" -> also map "Jasprit Bumrah"
-            parts = full_name.strip().split()
-            if len(parts) >= 3:
-                # First + Last: "Jasprit Bumrah"
-                full_to_cricsheet[f"{parts[0]} {parts[-1]}".lower()] = cricsheet
-                # Any middle name + Last: e.g. "Wanindu de Silva" or "Wanindu Hasaranga"
-                for mid in parts[1:-1]:
-                    full_to_cricsheet[f"{parts[0]} {mid}".lower()] = cricsheet
-                    full_to_cricsheet[f"{mid} {parts[-1]}".lower()] = cricsheet
-                # For very long names, try all pairs of consecutive words
-                if len(parts) >= 4:
-                    for i in range(len(parts) - 1):
-                        full_to_cricsheet[f"{parts[i]} {parts[i+1]}".lower()] = cricsheet
+    # Add mappings from lifetime stats for players absent from players-data-updated.csv
+    for _, row in player_lifetime.iterrows():
+        cricsheet = row["player_name"]
+        full_name = row.get("player_full_name")
+        if pd.notna(cricsheet):
+            for alias in iter_player_name_variants(cricsheet, full_name):
+                full_to_cricsheet.setdefault(alias.lower(), cricsheet)
 
-            # Map cricsheet name itself (in case user types it)
-            full_to_cricsheet[cricsheet.strip().lower()] = cricsheet
+    # Add supplemental mappings for 2026 players missing historical records
+    for _, row in supplemental_profiles.iterrows():
+        cricsheet = row["player_name"]
+        full_name = row.get("player_full_name")
+        if pd.notna(cricsheet):
+            for alias in iter_player_name_variants(cricsheet, full_name):
+                full_to_cricsheet.setdefault(alias.lower(), cricsheet)
 
     # Load IPL 2026 specific name mappings (covers new/uncapped players)
     name_map_path = "Datasets/ipl_2026_name_map.csv"
     if os.path.exists(name_map_path):
         name_map = pd.read_csv(name_map_path)
         for _, row in name_map.iterrows():
-            full_to_cricsheet[row["full_name"].strip().lower()] = row["cricsheet_name"].strip()
+            key = row["full_name"].strip().lower()
+            if key not in full_to_cricsheet:
+                full_to_cricsheet[key] = row["cricsheet_name"].strip()
 
     return full_to_cricsheet, meta
 
@@ -321,42 +437,28 @@ ROLE_LABELS = {
 
 def build_player_meta_lookup(players_meta):
     """Create a lowercase name -> batting/bowling style lookup."""
+    player_lifetime = pd.read_csv("Datasets/player_lifetime_stats.csv")
+    supplemental_profiles = (
+        pd.read_csv(SUPPLEMENTAL_PROFILES_PATH) if os.path.exists(SUPPLEMENTAL_PROFILES_PATH) else pd.DataFrame()
+    )
+
     lookup = {}
-    for _, row in players_meta.iterrows():
-        bat_style = row["bat_style"] if pd.notna(row["bat_style"]) else ""
-        bowl_style = row["bowl_style"] if pd.notna(row["bowl_style"]) else ""
+    meta_sources = [players_meta, player_lifetime, supplemental_profiles]
 
-        keys = set()
-        for col in ("player_name", "player_full_name"):
-            value = row.get(col)
-            if pd.notna(value) and str(value).strip():
-                keys.add(str(value).strip().lower())
+    for source in meta_sources:
+        for _, row in source.iterrows():
+            bat_style = row["bat_style"] if "bat_style" in row and pd.notna(row["bat_style"]) else ""
+            bowl_style = row["bowl_style"] if "bowl_style" in row and pd.notna(row["bowl_style"]) else ""
+            role_hint = row["role_hint"] if "role_hint" in row and pd.notna(row["role_hint"]) else ""
 
-        full_name = row["player_full_name"] if "player_full_name" in row and pd.notna(row["player_full_name"]) else ""
-        if full_name:
-            parts = full_name.strip().split()
-            if len(parts) >= 2:
-                keys.add(f"{parts[0]} {parts[-1]}".lower())
-
-        for key in keys:
-            lookup[key] = {
-                "bat_style": bat_style,
-                "bowl_style": bowl_style,
-            }
+            for alias in iter_player_name_variants(row.get("player_name"), row.get("player_full_name")):
+                lookup[alias.lower()] = {
+                    "bat_style": bat_style,
+                    "bowl_style": bowl_style,
+                    "role_hint": role_hint,
+                }
 
     return lookup
-
-
-DEFAULT_STATS = {
-    "batting_sr": 120.0,
-    "bowling_econ": 8.0,
-    "experience": 0,
-    "avg_runs": 20.0,
-    "batting_innings": 0,
-    "bowling_innings": 0,
-    "balls_bowled": 0,
-    "wickets": 0,
-}
 
 
 def resolve_player_name(name, full_to_cricsheet, all_cricsheet_names):
@@ -429,6 +531,10 @@ def infer_player_role(name, full_to_cricsheet, all_cricsheet_names, player_meta_
 
     meta = player_meta_lookup.get(name.strip().lower()) or player_meta_lookup.get(resolved_name.strip().lower(), {})
     bowl_style = str(meta.get("bowl_style", "") or "").strip().lower()
+    role_hint = str(meta.get("role_hint", "") or "").strip().lower()
+
+    if role_hint in ROLE_ICONS:
+        return role_hint
 
     batting_innings = float(stats.get("batting_innings", 0) or 0)
     avg_runs = float(stats.get("avg_runs", 0) or 0)
@@ -855,6 +961,163 @@ def predict_match(
 
 
 # ============================================================
+# Supabase — client, auth, prediction history
+# ============================================================
+
+def _get_supabase() -> Client:
+    """Create a Supabase client, restoring the current user's session if present."""
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["anon_key"]
+    client = create_client(url, key)
+    if st.session_state.get("sb_access_token"):
+        try:
+            client.auth.set_session(
+                st.session_state["sb_access_token"],
+                st.session_state["sb_refresh_token"],
+            )
+        except Exception:
+            _clear_auth_session()
+    return client
+
+
+def _clear_auth_session():
+    for k in ("sb_access_token", "sb_refresh_token", "sb_user_email", "sb_user_id", "sb_display_name"):
+        st.session_state.pop(k, None)
+
+
+def _store_auth_session(session):
+    st.session_state["sb_access_token"] = session.access_token
+    st.session_state["sb_refresh_token"] = session.refresh_token
+    st.session_state["sb_user_email"] = session.user.email
+    st.session_state["sb_user_id"] = str(session.user.id)
+    # Fetch display name from user_profiles
+    try:
+        sb = _get_supabase()
+        resp = sb.table("user_profiles").select("display_name").eq("id", str(session.user.id)).single().execute()
+        st.session_state["sb_display_name"] = resp.data.get("display_name") or session.user.email.split("@")[0]
+    except Exception:
+        st.session_state["sb_display_name"] = session.user.email.split("@")[0]
+
+
+def render_auth_page():
+    """Render the login / sign-up page. Returns True when the user is authenticated."""
+    st.markdown('<p class="main-title">IPL 2026 Match Predictor</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-title">Sign in to save and load your predictions</p>', unsafe_allow_html=True)
+    st.markdown("---")
+
+    col_left, col_center, col_right = st.columns([1, 1.4, 1])
+    with col_center:
+        tab_login, tab_signup = st.tabs(["Sign In", "Create Account"])
+
+        with tab_login:
+            email = st.text_input("Email", key="login_email")
+            password = st.text_input("Password", type="password", key="login_password")
+            if st.button("Sign In", use_container_width=True, type="primary"):
+                if not email or not password:
+                    st.error("Enter your email and password.")
+                else:
+                    try:
+                        sb = _get_supabase()
+                        resp = sb.auth.sign_in_with_password({"email": email, "password": password})
+                        _store_auth_session(resp.session)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Sign-in failed: {e}")
+
+        with tab_signup:
+            new_display = st.text_input("Display Name", key="signup_display")
+            new_email = st.text_input("Email", key="signup_email")
+            new_pass = st.text_input("Password (min 6 chars)", type="password", key="signup_password")
+            new_pass2 = st.text_input("Confirm password", type="password", key="signup_password2")
+            if st.button("Create Account", use_container_width=True, type="primary"):
+                if not new_display or not new_email or not new_pass:
+                    st.error("Fill in all fields.")
+                elif new_pass != new_pass2:
+                    st.error("Passwords do not match.")
+                elif len(new_pass) < 6:
+                    st.error("Password must be at least 6 characters.")
+                else:
+                    try:
+                        sb = _get_supabase()
+                        resp = sb.auth.sign_up({
+                            "email": new_email,
+                            "password": new_pass,
+                            "options": {"data": {"display_name": new_display}},
+                        })
+                        if resp.session:
+                            # Upsert profile with chosen display name
+                            sb.auth.set_session(resp.session.access_token, resp.session.refresh_token)
+                            sb.table("user_profiles").upsert({
+                                "id": str(resp.user.id),
+                                "display_name": new_display,
+                            }).execute()
+                            _store_auth_session(resp.session)
+                            st.rerun()
+                        else:
+                            st.success("Account created! Check your email to confirm, then sign in.")
+                    except Exception as e:
+                        st.error(f"Sign-up failed: {e}")
+
+    return False  # not yet authenticated — caller should st.stop()
+
+
+def load_prediction_history() -> list:
+    """Return the current user's predictions from Supabase, newest first."""
+    if not st.session_state.get("sb_access_token"):
+        return []
+    try:
+        sb = _get_supabase()
+        resp = (
+            sb.table("predictions")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        rows = resp.data or []
+        # Normalise to match the shape the rest of the app expects
+        for r in rows:
+            r.setdefault("timestamp", r.get("created_at", "")[:19])
+            r.setdefault("team1_xi", [])
+            r.setdefault("team2_xi", [])
+        return rows
+    except Exception:
+        return []
+
+
+def save_prediction_history(entry: dict):
+    """Insert one prediction row for the current user into Supabase."""
+    if not st.session_state.get("sb_user_id"):
+        return
+    try:
+        sb = _get_supabase()
+        sb.table("predictions").insert({
+            "user_id":          st.session_state["sb_user_id"],
+            "team1":            entry.get("team1"),
+            "team2":            entry.get("team2"),
+            "venue":            entry.get("venue"),
+            "toss_winner":      entry.get("toss_winner"),
+            "toss_decision":    entry.get("toss_decision"),
+            "team1_xi":         entry.get("team1_xi", []),
+            "team2_xi":         entry.get("team2_xi", []),
+            "team1_impact":     entry.get("team1_impact"),
+            "team2_impact":     entry.get("team2_impact"),
+            "predicted_winner": entry.get("predicted_winner"),
+            "t1_prob":          entry.get("t1_prob"),
+            "t2_prob":          entry.get("t2_prob"),
+        }).execute()
+    except Exception:
+        pass  # history save is non-critical; don't crash the prediction
+
+
+# ============================================================
+# Auth Gate — show login page if not signed in
+# ============================================================
+if not st.session_state.get("sb_access_token"):
+    render_auth_page()
+    st.stop()
+
+# ============================================================
 # Load everything
 # ============================================================
 if not os.path.exists("Models/xgb_model.pkl"):
@@ -908,6 +1171,17 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Select the Playing XI and projected impact player for each team.")
 
+    st.markdown("---")
+    display = st.session_state.get("sb_display_name") or st.session_state.get("sb_user_email", "")
+    st.caption(f"👤 **{display}**  \n{st.session_state.get('sb_user_email', '')}")
+    if st.button("Sign Out", use_container_width=True):
+        try:
+            _get_supabase().auth.sign_out()
+        except Exception:
+            pass
+        _clear_auth_session()
+        st.rerun()
+
 # ============================================================
 # UI — Playing XI Input
 # ============================================================
@@ -951,6 +1225,43 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
                 for p in squad
             ]
             option_map = dict(zip(display_options, squad))  # display -> real name
+            reverse_map = {v: k for k, v in option_map.items()}  # real name -> display label
+
+            # Apply any pending XI load (triggered by "Load from previous" button on prior render)
+            _pending_xi_key = f"_pending_xi_{key_suffix}"
+            if st.session_state.get(_pending_xi_key):
+                _labels = [reverse_map[p] for p in st.session_state[_pending_xi_key] if p in reverse_map]
+                if _labels:
+                    st.session_state[f"xi_{key_suffix}_select"] = _labels
+                del st.session_state[_pending_xi_key]
+
+            # --- Load from previous prediction ---
+            _history = load_prediction_history()
+            _relevant = [
+                p for p in _history
+                if p.get("team1") == team_code or p.get("team2") == team_code
+            ]
+            if _relevant:
+                with st.expander("📂 Load XI from previous prediction"):
+                    _opts = [
+                        f"#{p['id']}  {p.get('timestamp','')[:10]}  {p.get('team1','?')} vs {p.get('team2','?')}  →  {p.get('predicted_winner','?')} ({p.get('t1_prob' if p.get('team1')==team_code else 't2_prob', 0)*100:.0f}%)"
+                        for p in _relevant
+                    ]
+                    _sel_idx = st.selectbox(
+                        "Pick a past prediction",
+                        range(len(_opts)),
+                        format_func=lambda i: _opts[i],
+                        key=f"_load_sel_{key_suffix}",
+                    )
+                    if st.button("Load this XI", key=f"_load_btn_{key_suffix}"):
+                        _pred = _relevant[_sel_idx]
+                        _xi_key = "team1_xi" if _pred.get("team1") == team_code else "team2_xi"
+                        _imp_key = "team1_impact" if _pred.get("team1") == team_code else "team2_impact"
+                        st.session_state[_pending_xi_key] = _pred.get(_xi_key, [])
+                        _imp = _pred.get(_imp_key)
+                        if _imp:
+                            st.session_state[f"_pending_impact_{key_suffix}"] = _imp
+                        st.rerun()
 
             selected_display = st.multiselect(
                 f"Select Playing XI ({team_code})",
@@ -1028,6 +1339,18 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
                     "None",
                 )
 
+            # Apply pending impact player load from "Load from previous"
+            _pending_impact_key = f"_pending_impact_{key_suffix}"
+            if st.session_state.get(_pending_impact_key):
+                _imp_name = st.session_state[_pending_impact_key]
+                _imp_label = next(
+                    (lbl for lbl, p in option_map.items() if p == _imp_name),
+                    None,
+                )
+                if _imp_label and _imp_label in display_options:
+                    default_label = _imp_label
+                del st.session_state[_pending_impact_key]
+
             selected_impact_display = st.selectbox(
                 f"Projected Impact Player ({team_code})",
                 options=display_options,
@@ -1040,6 +1363,36 @@ def render_xi_selector(col, team_name, team_code, squad, overseas_set, bats_firs
             if selected_impact and selected_impact in overseas_set and overseas_count >= 4:
                 st.error("Overseas impact player not allowed when the starting XI already has 4 overseas players.")
             elif selected_impact:
+                try:
+                    selected_xi = selected_real
+                    resolved_xi = [
+                        resolved_name
+                        for resolved_name, _ in [
+                            resolve_player_name(n, full_to_cricsheet, all_cricsheet_names) for n in selected_xi
+                        ]
+                        if resolved_name is not None
+                    ]
+                    resolved_impact, _ = resolve_player_name(selected_impact, full_to_cricsheet, all_cricsheet_names)
+                    phase = "bowling" if bats_first else "batting"
+                    result = apply_impact_substitution(
+                        resolved_xi,
+                        resolved_impact,
+                        phase,
+                        ipl_stats,
+                        lifetime_stats,
+                    )
+                    if result["used"]:
+                        st.markdown(
+                            f"<div style='background:#0d1117;border-left:3px solid #f0883e;padding:8px;border-radius:4px;color:#e6edf3;'>⚡ {selected_impact} will replace {result['replaced_player']} in the {phase} phase</div>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            f"<div style='background:#0d1117;border-left:3px solid #30363d;padding:8px;border-radius:4px;color:#8b949e;'>ℹ️ {selected_impact} selected — current XI already outperforms in the {phase} phase, no swap projected</div>",
+                            unsafe_allow_html=True,
+                        )
+                except Exception:
+                    pass
                 role_text = format_player_role_text(
                     selected_impact,
                     full_to_cricsheet,
@@ -1166,6 +1519,10 @@ if predict_clicked:
     if unknown_t2:
         st.warning(f"**{team2_code}** — unknown players (using defaults): {', '.join(unknown_t2)}")
 
+    # Capture original squad display names before overwriting with cricsheet names
+    original_t1_xi = list(team1_xi)
+    original_t2_xi = list(team2_xi)
+
     # Use resolved names for prediction
     team1_xi = resolved_t1
     team2_xi = resolved_t2
@@ -1185,6 +1542,23 @@ if predict_clicked:
     winner_name = team1_name if t1_prob > 0.5 else team2_name
     winner_code = team1_code if t1_prob > 0.5 else team2_code
     winner_prob = max(t1_prob, t2_prob)
+
+    # Save prediction to Supabase
+    save_prediction_history({
+        "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        "team1": team1_code,
+        "team2": team2_code,
+        "venue": venue,
+        "toss_winner": toss_winner_code,
+        "toss_decision": toss_decision,
+        "team1_xi": original_t1_xi,
+        "team2_xi": original_t2_xi,
+        "team1_impact": team1_impact,
+        "team2_impact": team2_impact,
+        "predicted_winner": winner_code,
+        "t1_prob": round(float(t1_prob), 3),
+        "t2_prob": round(float(t2_prob), 3),
+    })
 
     st.markdown("---")
 

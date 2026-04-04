@@ -1,0 +1,10 @@
+player_name,player_full_name,bat_style,bowl_style,batting_sr,bowling_econ,experience,avg_runs,batting_innings,bowling_innings,balls_bowled,wickets,role_hint,is_placeholder
+Allah Ghazanfar,Allah Mohammad Ghazanfar,Right hand Bat,Right arm Offbreak,,,,0,0,0,0,0,all_rounder,true
+AA Ankolekar,Atharva Ankolekar,Left hand Bat,Slow Left arm Orthodox,,,,0,0,0,0,0,all_rounder,true
+RD Ostwal,Vicky Ostwal,Right hand Bat,Slow Left arm Orthodox,,,,0,0,0,0,0,bowler,true
+CP Connolly,Cooper Connolly,Left hand Bat,Slow Left arm Orthodox,,,,0,0,0,0,0,all_rounder,true
+BJ Dwarshuis,Ben Dwarshuis,Left hand Bat,Left arm Fast medium,,,,0,0,0,0,0,all_rounder,true
+Nishant Sindhu,Nishant Sindhu,Left hand Bat,Slow Left arm Orthodox,,,,0,0,0,0,0,all_rounder,true
+GS Brar,Gurnoor Singh Brar,Left hand Bat,Left arm Medium fast,,,,0,0,0,0,0,all_rounder,true
+V Vijaykumar,Vyshak Vijaykumar,Right hand Bat,Right arm Fast medium,,,,0,0,0,0,0,bowler,true
+Saurabh Dubey,Saurabh Dubey,Right hand Bat,Right arm Fast medium,,,,0,0,0,0,0,bowler,true

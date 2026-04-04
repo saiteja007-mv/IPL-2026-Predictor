@@ -24,7 +24,7 @@
         "Naman Dhir",
         "Jasprit Bumrah",
         "Trent Boult",
-        "Allah Ghafanzar",
+        "Allah Ghazanfar",
         "Ashwani Kumar",
         "Deepak Chahar",
         "Will Jacks",
@@ -60,7 +60,7 @@
         "Gurjapneet Singh",
         "Shreyas Gopal",
         "Mukesh Choudhary",
-        "Nathan Ellis",
+        "Spencer Johnson",
         "Akeal Hosein",
         "Prashant Veer",
         "Kartik Sharma",
@@ -118,7 +118,7 @@
         "Ajinkya Rahane",
         "Angkrish Raghuvanshi",
         "Anukul Roy",
-        "Harshit Rana",
+        "Navdeep Saini",
         "Manish Pandey",
         "Ramandeep Singh",
         "Rinku Singh",
@@ -138,7 +138,7 @@
         "Sarthak Ranjan",
         "Daksh Kamra",
         "Rachin Ravindra",
-        "Akash Deep",
+        "Saurabh Dubey",
         "Blessing Muzarabani"
       ]
     },
@@ -172,7 +172,8 @@
         "Lungi Ngidi",
         "Sahil Parakh",
         "Prithvi Shaw",
-        "Kyle Jamieson"
+        "Kyle Jamieson",
+        "Mukesh Kumar"
       ]
     },
     "SRH": {
@@ -186,7 +187,7 @@
         "Travis Head",
         "Abhishek Sharma",
         "Aniket Verma",
-        "R Smaran",
+        "Smaran Ravichandran",
         "Ishan Kishan",
         "Heinrich Klaasen",
         "Nitish Kumar Reddy",
@@ -206,7 +207,7 @@
         "Krains Fuletra",
         "Liam Livingstone",
         "Shivam Mavi",
-        "Jack Edwards"
+        "David Payne"
       ]
     },
     "RR": {
@@ -218,7 +219,7 @@
       "secondary_venue": "ACA Cricket Stadium, Guwahati",
       "squad": [
         "Ravindra Jadeja",
-        "Sam Curran",
+        "Dasun Shanaka",
         "Donovan Ferreira",
         "Sandeep Sharma",
         "Shubham Dubey",
@@ -238,7 +239,7 @@
         "Yash Raj Punja",
         "Vignesh Puthur",
         "Ravi Singh",
-        "Aman Rao",
+        "Aman Rao Perala",
         "Brijesh Sharma",
         "Adam Milne",
         "Kuldeep Sen"
@@ -300,7 +301,7 @@
         "Avesh Khan",
         "Mohsin Khan",
         "Manimaran Siddharth",
-        "Digvesh Rathi",
+        "Digvesh Singh Rathi",
         "Prince Yadav",
         "Akash Singh",
         "Mohammed Shami",
@@ -309,7 +310,7 @@
         "Anrich Nortje",
         "Mukul Choudhary",
         "Naman Tiwari",
-        "Akshat Raghuvanshi",
+        "Akshat Raghuwanshi",
         "Josh Inglis"
       ]
     },
@@ -343,7 +344,7 @@
         "Ashok Sharma",
         "Jason Holder",
         "Tom Banton",
-        "Prithvi Raj Yarra",
+        "Kulwant Khejroliya",
         "Luke Wood"
       ]
     }
@@ -434,17 +435,18 @@
   },
   "notes": {
     "replacement_players": [
-      "KKR: Blessing Muzarabani replaced Mustafizur Rahman (BCCI directive). Saurabh Dubey replaced Akash Deep (injury).",
-      "RCB: Yash Dayal ruled out for the season.",
-      "SRH: Ishan Kishan serving as interim captain while Pat Cummins recovers from minor injury.",
-      "RR: Sam Curran ruled out with injury."
+      "CSK: Spencer Johnson is listed in the current squad in place of Nathan Ellis.",
+      "KKR: Blessing Muzarabani replaced Mustafizur Rahman; Navdeep Saini and Saurabh Dubey are listed in the current squad.",
+      "SRH: David Payne replaced Jack Edwards; Ishan Kishan captained the side on an interim basis in late March while Pat Cummins recovered from a minor issue.",
+      "RR: Dasun Shanaka is listed in the current squad in place of Sam Curran.",
+      "GT: Kulwant Khejroliya is listed in the current squad in place of Prithvi Raj Yarra."
     ],
     "new_venues_for_2026": [
       "Nava Raipur (Shaheed Veer Narayan Singh International Cricket Stadium) - hosting IPL matches as RCB's secondary venue",
       "Guwahati (ACA Cricket Stadium) - previously used in IPL, hosting RR matches",
       "Dharamshala (HPCA Cricket Stadium) - previously used in IPL, hosting PBKS matches"
     ],
-    "data_source": "Compiled from Deccan Herald, ESPN Cricinfo, Wikipedia, and official IPL sources (March 2026)",
+    "data_source": "Verified against official IPL and franchise squad pages (April 1, 2026)",
     "squad_rules": "Each team must have 18-25 players with a maximum of 8 overseas players"
   }
 }
