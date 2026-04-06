@@ -268,22 +268,34 @@ def run_update(backfill: bool = False, dry_run: bool = False, no_retrain: bool =
         new_rows.append(row)
 
         # Store score data for NRR calculation
-        scores = detail.get("score", [])
-        score_entry = {
-            "match_num": match_num,
-            "date": detail.get("date", ""),
-            "team1": detail["teams"][0],
-            "team2": detail["teams"][1],
-            "winner": detail.get("matchWinner", ""),
-            "innings": [],
-        }
-        for inning in scores:
-            score_entry["innings"].append({
-                "team": inning.get("inning", "").replace(" Inning 1", "").replace(" Inning 2", ""),
+        # Use innings order (not API inning names which can be corrupted)
+        api_innings = detail.get("score", [])
+        teams_pair = detail["teams"]
+        clean_innings = []
+        for idx, inning in enumerate(api_innings):
+            raw_name = inning.get("inning", "").replace(" Inning 1", "").replace(" Inning 2", "")
+            # Try to resolve team name; fallback to order-based assignment
+            resolved = raw_name
+            for t in teams_pair:
+                if t.lower() in raw_name.lower():
+                    resolved = t
+                    break
+            else:
+                resolved = teams_pair[0] if idx == 0 else teams_pair[1]
+            clean_innings.append({
+                "team": resolved,
                 "runs": inning.get("r", 0),
                 "wickets": inning.get("w", 0),
                 "overs": inning.get("o", 0),
             })
+        score_entry = {
+            "match_num": match_num,
+            "date": detail.get("date", ""),
+            "team1": teams_pair[0],
+            "team2": teams_pair[1],
+            "winner": detail.get("matchWinner", ""),
+            "innings": clean_innings,
+        }
         new_scores.append(score_entry)
 
         # Build history entry (canonical codes)

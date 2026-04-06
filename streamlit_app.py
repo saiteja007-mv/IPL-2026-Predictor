@@ -404,18 +404,28 @@ def run_live_update(alias_map: dict) -> int:
         }
         csv_rows.append(row)
 
-        # Store scores for NRR
+        # Store scores for NRR — use innings order, not API inning names
+        api_innings = d.get("score", [])
+        clean_innings = []
+        for idx, inning in enumerate(api_innings):
+            # Use teams list + order to determine batting team (1st inn = batting first)
+            # Resolve from inning name, fallback to order-based assignment
+            raw_name = inning.get("inning", "").replace(" Inning 1", "").replace(" Inning 2", "")
+            resolved = _resolve_inning_team(raw_name, teams[0], teams[1])
+            # If resolution gives a valid team, use it; otherwise assign by order
+            valid_teams = {TEAM_SHORT.get(teams[0], teams[0]), TEAM_SHORT.get(teams[1], teams[1]),
+                           teams[0], teams[1]}
+            if resolved not in valid_teams:
+                resolved = teams[0] if idx == 0 else teams[1]
+            clean_innings.append({
+                "team": resolved, "runs": inning.get("r", 0),
+                "wickets": inning.get("w", 0), "overs": inning.get("o", 0),
+            })
         score_entry = {
             "match_num": match_num, "date": d.get("date", ""),
             "team1": teams[0], "team2": teams[1],
-            "winner": winner_name, "innings": [],
+            "winner": winner_name, "innings": clean_innings,
         }
-        for inning in d.get("score", []):
-            score_entry["innings"].append({
-                "team": inning.get("inning", "").replace(" Inning 1", "").replace(" Inning 2", ""),
-                "runs": inning.get("r", 0), "wickets": inning.get("w", 0),
-                "overs": inning.get("o", 0),
-            })
         new_scores.append(score_entry)
         processed_ids.add(m["id"])
 
@@ -466,10 +476,47 @@ TEAM_SHORT = {
     "Rajasthan Royals": "RR", "Punjab Kings": "PK",
     "Lucknow Super Giants": "LSG", "Gujarat Titans": "GT",
 }
+# Reverse lookup + lowercase variants for fuzzy inning name resolution
+_TEAM_RESOLVE = {}
+for full, code in TEAM_SHORT.items():
+    _TEAM_RESOLVE[full] = code
+    _TEAM_RESOLVE[full.lower()] = code
+    _TEAM_RESOLVE[code] = code
+    _TEAM_RESOLVE[code.lower()] = code
+
+
+def _resolve_inning_team(inning_name: str, team1: str, team2: str) -> str:
+    """Resolve possibly corrupted inning team name to a canonical code."""
+    name = inning_name.strip()
+    # Direct lookup
+    if name in _TEAM_RESOLVE:
+        return _TEAM_RESOLVE[name]
+    # Try lowercase
+    nl = name.lower()
+    if nl in _TEAM_RESOLVE:
+        return _TEAM_RESOLVE[nl]
+    # Fuzzy: check if team1 or team2 name is contained in the inning name
+    t1_code = TEAM_SHORT.get(team1, team1)
+    t2_code = TEAM_SHORT.get(team2, team2)
+    if team1.lower() in nl or t1_code.lower() in nl:
+        return t1_code
+    if team2.lower() in nl or t2_code.lower() in nl:
+        return t2_code
+    return name
+
+
+def _overs_to_decimal(overs) -> float:
+    """Convert cricket overs (e.g. 18.4) to decimal overs (18.667)."""
+    if not isinstance(overs, (int, float)) or overs <= 0:
+        return 0.0
+    full = int(overs)
+    balls = round((overs - full) * 10)
+    return full + balls / 6
+
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def build_points_table() -> pd.DataFrame:
-    """Build IPL 2026 points table from scores JSON."""
+    """Build IPL 2026 points table from scores JSON with proper NRR."""
     scores_path = Path("Datasets/ipl_2026_scores.json")
     if not scores_path.exists():
         return pd.DataFrame()
@@ -480,7 +527,6 @@ def build_points_table() -> pd.DataFrame:
     if not matches:
         return pd.DataFrame()
 
-    # Initialize team stats
     teams = {}
     for code in ["RCB", "MI", "CSK", "DC", "KKR", "SRH", "RR", "PK", "LSG", "GT"]:
         teams[code] = {
@@ -490,12 +536,12 @@ def build_points_table() -> pd.DataFrame:
         }
 
     for match in matches:
-        winner = match.get("winner", "")
         t1_full = match.get("team1", "")
         t2_full = match.get("team2", "")
+        winner_full = match.get("winner", "")
         t1 = TEAM_SHORT.get(t1_full, t1_full)
         t2 = TEAM_SHORT.get(t2_full, t2_full)
-        w_code = TEAM_SHORT.get(winner, winner)
+        w_code = TEAM_SHORT.get(winner_full, winner_full)
 
         if t1 not in teams or t2 not in teams:
             continue
@@ -517,31 +563,47 @@ def build_points_table() -> pd.DataFrame:
             teams[t1]["Pts"] += 1
             teams[t2]["Pts"] += 1
 
-        # NRR calculation from innings data
+        # NRR: use innings order (1st = batting first, 2nd = chasing)
+        # ICC NRR rule: if a team is all out, the overs faced count as full 20
+        # NRR = (runs_scored / overs_faced) - (runs_conceded / overs_bowled)
+        # "overs_faced" for a team = actual overs if not all out, else 20
+        # "overs_bowled" by a team = overs the opponent faced (with same all-out rule)
         innings = match.get("innings", [])
-        for inn in innings:
-            inn_team_full = inn.get("team", "")
-            inn_code = TEAM_SHORT.get(inn_team_full, inn_team_full)
-            runs = inn.get("runs", 0)
-            overs = inn.get("overs", 0)
-            # Convert overs like 18.1 to proper ball count for calculation
-            if isinstance(overs, (int, float)) and overs > 0:
-                full_overs = int(overs)
-                balls = round((overs - full_overs) * 10)
-                decimal_overs = full_overs + balls / 6
+        if len(innings) >= 2:
+            inn1_code = _resolve_inning_team(innings[0].get("team", ""), t1_full, t2_full)
+            inn2_code = _resolve_inning_team(innings[1].get("team", ""), t1_full, t2_full)
 
-                if inn_code == t1:
-                    teams[t1]["runs_for"] += runs
-                    teams[t1]["overs_for"] += decimal_overs
-                    teams[t2]["runs_against"] += runs
-                    teams[t2]["overs_against"] += decimal_overs
-                elif inn_code == t2:
-                    teams[t2]["runs_for"] += runs
-                    teams[t2]["overs_for"] += decimal_overs
-                    teams[t1]["runs_against"] += runs
-                    teams[t1]["overs_against"] += decimal_overs
+            if inn1_code not in teams:
+                inn1_code = t1
+            if inn2_code not in teams:
+                inn2_code = t2
+            if inn1_code == inn2_code:
+                inn2_code = t2 if inn1_code == t1 else t1
 
-    # Build DataFrame
+            r1 = innings[0].get("runs", 0)
+            w1 = innings[0].get("wickets", 0)
+            o1_raw = _overs_to_decimal(innings[0].get("overs", 0))
+            # All out = 20 overs for NRR purposes
+            o1 = 20.0 if w1 >= 10 else o1_raw
+
+            r2 = innings[1].get("runs", 0)
+            w2 = innings[1].get("wickets", 0)
+            o2_raw = _overs_to_decimal(innings[1].get("overs", 0))
+            o2 = 20.0 if w2 >= 10 else o2_raw
+
+            if o1 > 0 and o2 > 0:
+                # inn1_code scored r1 in o1 overs, faced bowling from inn2_code
+                teams[inn1_code]["runs_for"] += r1
+                teams[inn1_code]["overs_for"] += o1
+                teams[inn2_code]["runs_against"] += r1
+                teams[inn2_code]["overs_against"] += o1
+
+                # inn2_code scored r2 in o2 overs, faced bowling from inn1_code
+                teams[inn2_code]["runs_for"] += r2
+                teams[inn2_code]["overs_for"] += o2
+                teams[inn1_code]["runs_against"] += r2
+                teams[inn1_code]["overs_against"] += o2
+
     rows = []
     for code, s in teams.items():
         nrr = 0.0
@@ -554,7 +616,7 @@ def build_points_table() -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
     df = df.sort_values(["Pts", "NRR"], ascending=[False, False]).reset_index(drop=True)
-    df.index = df.index + 1  # 1-based rank
+    df.index = df.index + 1
     df.index.name = "#"
     return df
 
