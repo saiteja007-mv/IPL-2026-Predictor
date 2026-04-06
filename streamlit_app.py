@@ -624,8 +624,19 @@ def build_points_table() -> pd.DataFrame:
 # ============================================================
 # Load Model & Artifacts (cached so it loads only once)
 # ============================================================
+def _model_file_hash() -> str:
+    """Return a hash of model file modification times to invalidate cache on new artifacts."""
+    import hashlib
+    h = hashlib.md5()
+    for fname in ["xgb_model.pkl", "elo_ratings.pkl", "feature_columns.pkl", "alias_map.pkl", "match_history.pkl"]:
+        p = Path("Models") / fname
+        if p.exists():
+            h.update(str(p.stat().st_mtime_ns).encode())
+    return h.hexdigest()
+
+
 @st.cache_resource
-def load_model():
+def load_model(_hash=None):
     """Load all saved model artifacts."""
     models_dir = "Models"
     with open(f"{models_dir}/xgb_model.pkl", "rb") as f:
@@ -1509,7 +1520,7 @@ if not os.path.exists("Models/xgb_model.pkl"):
     st.error("Model not found! Run `training.ipynb` first to train and save the model.")
     st.stop()
 
-model, feature_cols, elo_ratings, alias_map, match_history = load_model()
+model, feature_cols, elo_ratings, alias_map, match_history = load_model(_hash=_model_file_hash())
 ipl_stats, lifetime_stats = load_player_stats()
 full_to_cricsheet, players_meta = build_name_resolver()
 player_meta_lookup = build_player_meta_lookup(players_meta)
