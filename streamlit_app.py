@@ -334,10 +334,9 @@ def check_for_new_matches() -> dict:
 
 def run_live_update(alias_map: dict) -> int:
     """
-    Fetch and integrate new IPL 2026 match results.
+    Fetch new IPL 2026 results, update CSV + scores, retrain model.
     Returns number of new matches added.
     """
-    # Load current state
     processed_ids = set()
     if UPDATE_LOG_PATH.exists():
         try:
@@ -346,12 +345,6 @@ def run_live_update(alias_map: dict) -> int:
         except Exception:
             pass
 
-    with open("Models/elo_ratings.pkl", "rb") as f:
-        elo_ratings = pickle.load(f)
-    with open("Models/match_history.pkl", "rb") as f:
-        match_history = pickle.load(f)
-
-    # Fetch completed matches
     data = _cricapi_get("series_info", {"id": IPL_2026_SERIES_ID})
     if not data:
         return 0
@@ -369,6 +362,7 @@ def run_live_update(alias_map: dict) -> int:
 
     new_matches.sort(key=lambda x: x["date"])
     csv_rows = []
+    new_scores = []
 
     for m in new_matches:
         detail = _cricapi_get("match_info", {"id": m["id"]})
@@ -410,26 +404,19 @@ def run_live_update(alias_map: dict) -> int:
         }
         csv_rows.append(row)
 
-        # Resolve to canonical codes and update Elo + history
-        def _resolve(n):
-            return alias_map.get(n.strip().lower(), n.strip())
-
-        w_code = _resolve(winner_name)
-        t1_code = _resolve(teams[0])
-        t2_code = _resolve(teams[1])
-        l_code = t2_code if w_code == t1_code else t1_code
-
-        elo_ratings.setdefault(w_code, 1500)
-        elo_ratings.setdefault(l_code, 1500)
-        new_w, new_l = _elo_update(elo_ratings[w_code], elo_ratings[l_code])
-        elo_ratings[w_code] = new_w
-        elo_ratings[l_code] = new_l
-
-        match_history.append({
-            "team1": t1_code, "team2": t2_code, "winner": w_code,
-            "venue": venue, "toss_winner": _resolve(toss_winner),
-            "toss_decision": toss_decision,
-        })
+        # Store scores for NRR
+        score_entry = {
+            "match_num": match_num, "date": d.get("date", ""),
+            "team1": teams[0], "team2": teams[1],
+            "winner": winner_name, "innings": [],
+        }
+        for inning in d.get("score", []):
+            score_entry["innings"].append({
+                "team": inning.get("inning", "").replace(" Inning 1", "").replace(" Inning 2", ""),
+                "runs": inning.get("r", 0), "wickets": inning.get("w", 0),
+                "overs": inning.get("o", 0),
+            })
+        new_scores.append(score_entry)
         processed_ids.add(m["id"])
 
     if not csv_rows:
@@ -438,11 +425,18 @@ def run_live_update(alias_map: dict) -> int:
     # Append to CSV
     pd.DataFrame(csv_rows).to_csv("Datasets/matches.csv", mode="a", header=False, index=False)
 
-    # Save updated artifacts
-    with open("Models/elo_ratings.pkl", "wb") as f:
-        pickle.dump(elo_ratings, f)
-    with open("Models/match_history.pkl", "wb") as f:
-        pickle.dump(match_history, f)
+    # Save scores
+    existing_scores = []
+    scores_path = Path("Datasets/ipl_2026_scores.json")
+    if scores_path.exists():
+        try:
+            with open(scores_path) as f:
+                existing_scores = json.load(f)
+        except Exception:
+            pass
+    existing_scores.extend(new_scores)
+    with open(scores_path, "w") as f:
+        json.dump(existing_scores, f, indent=2)
 
     # Save update log
     with open(UPDATE_LOG_PATH, "w") as f:
@@ -452,7 +446,117 @@ def run_live_update(alias_map: dict) -> int:
             "matches_added": len(csv_rows),
         }, f, indent=2)
 
+    # Retrain model with updated data
+    try:
+        from retrain_model import retrain, save_artifacts
+        result = retrain(quiet=True)
+        if result:
+            save_artifacts(*result, quiet=True)
+    except Exception:
+        pass  # Retrain failure is non-critical; incremental Elo update still works
+
     return len(csv_rows)
+
+
+# ── Points Table ──────────────────────────────────────────────
+TEAM_SHORT = {
+    "Royal Challengers Bengaluru": "RCB", "Mumbai Indians": "MI",
+    "Chennai Super Kings": "CSK", "Delhi Capitals": "DC",
+    "Kolkata Knight Riders": "KKR", "Sunrisers Hyderabad": "SRH",
+    "Rajasthan Royals": "RR", "Punjab Kings": "PK",
+    "Lucknow Super Giants": "LSG", "Gujarat Titans": "GT",
+}
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def build_points_table() -> pd.DataFrame:
+    """Build IPL 2026 points table from scores JSON."""
+    scores_path = Path("Datasets/ipl_2026_scores.json")
+    if not scores_path.exists():
+        return pd.DataFrame()
+
+    with open(scores_path) as f:
+        matches = json.load(f)
+
+    if not matches:
+        return pd.DataFrame()
+
+    # Initialize team stats
+    teams = {}
+    for code in ["RCB", "MI", "CSK", "DC", "KKR", "SRH", "RR", "PK", "LSG", "GT"]:
+        teams[code] = {
+            "M": 0, "W": 0, "L": 0, "NR": 0, "Pts": 0,
+            "runs_for": 0, "overs_for": 0.0,
+            "runs_against": 0, "overs_against": 0.0,
+        }
+
+    for match in matches:
+        winner = match.get("winner", "")
+        t1_full = match.get("team1", "")
+        t2_full = match.get("team2", "")
+        t1 = TEAM_SHORT.get(t1_full, t1_full)
+        t2 = TEAM_SHORT.get(t2_full, t2_full)
+        w_code = TEAM_SHORT.get(winner, winner)
+
+        if t1 not in teams or t2 not in teams:
+            continue
+
+        teams[t1]["M"] += 1
+        teams[t2]["M"] += 1
+
+        if w_code == t1:
+            teams[t1]["W"] += 1
+            teams[t1]["Pts"] += 2
+            teams[t2]["L"] += 1
+        elif w_code == t2:
+            teams[t2]["W"] += 1
+            teams[t2]["Pts"] += 2
+            teams[t1]["L"] += 1
+        else:
+            teams[t1]["NR"] += 1
+            teams[t2]["NR"] += 1
+            teams[t1]["Pts"] += 1
+            teams[t2]["Pts"] += 1
+
+        # NRR calculation from innings data
+        innings = match.get("innings", [])
+        for inn in innings:
+            inn_team_full = inn.get("team", "")
+            inn_code = TEAM_SHORT.get(inn_team_full, inn_team_full)
+            runs = inn.get("runs", 0)
+            overs = inn.get("overs", 0)
+            # Convert overs like 18.1 to proper ball count for calculation
+            if isinstance(overs, (int, float)) and overs > 0:
+                full_overs = int(overs)
+                balls = round((overs - full_overs) * 10)
+                decimal_overs = full_overs + balls / 6
+
+                if inn_code == t1:
+                    teams[t1]["runs_for"] += runs
+                    teams[t1]["overs_for"] += decimal_overs
+                    teams[t2]["runs_against"] += runs
+                    teams[t2]["overs_against"] += decimal_overs
+                elif inn_code == t2:
+                    teams[t2]["runs_for"] += runs
+                    teams[t2]["overs_for"] += decimal_overs
+                    teams[t1]["runs_against"] += runs
+                    teams[t1]["overs_against"] += decimal_overs
+
+    # Build DataFrame
+    rows = []
+    for code, s in teams.items():
+        nrr = 0.0
+        if s["overs_for"] > 0 and s["overs_against"] > 0:
+            nrr = (s["runs_for"] / s["overs_for"]) - (s["runs_against"] / s["overs_against"])
+        rows.append({
+            "Team": code, "M": s["M"], "W": s["W"], "L": s["L"],
+            "NR": s["NR"], "Pts": s["Pts"], "NRR": round(nrr, 3),
+        })
+
+    df = pd.DataFrame(rows)
+    df = df.sort_values(["Pts", "NRR"], ascending=[False, False]).reset_index(drop=True)
+    df.index = df.index + 1  # 1-based rank
+    df.index.name = "#"
+    return df
 
 
 # ============================================================
@@ -1365,11 +1469,12 @@ if os.path.exists(squads_path):
 # ============================================================
 _update_status = check_for_new_matches()
 if _update_status["new_count"] > 0 and _update_status["api_available"]:
-    n = run_live_update(alias_map)
+    with st.spinner(f"Updating {_update_status['new_count']} new match(es) & retraining model..."):
+        n = run_live_update(alias_map)
     if n > 0:
-        # Clear cached model data so fresh artifacts are loaded
         load_model.clear()
         check_for_new_matches.clear()
+        build_points_table.clear()
         st.rerun()
 
 
@@ -1379,6 +1484,25 @@ if _update_status["new_count"] > 0 and _update_status["api_available"]:
 st.markdown('<p class="main-title">IPL 2026 Match Predictor</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">XGBoost ML Model trained on 18 seasons of IPL data — now with live IPL 2026 updates</p>', unsafe_allow_html=True)
 st.markdown("---")
+
+# ============================================================
+# UI — IPL 2026 Points Table
+# ============================================================
+_points_df = build_points_table()
+if not _points_df.empty:
+    with st.expander("📊 IPL 2026 Points Table", expanded=False):
+        # Color code: top 4 qualify
+        def _highlight_qualify(row):
+            idx = row.name  # 1-based index
+            if idx <= 4:
+                return ["background-color: rgba(76, 175, 80, 0.15)"] * len(row)
+            return [""] * len(row)
+
+        styled = _points_df.style.apply(_highlight_qualify, axis=1).format({
+            "NRR": "{:+.3f}",
+        })
+        st.dataframe(styled, use_container_width=True)
+        st.caption("Top 4 teams (highlighted) qualify for playoffs. Updated automatically after each match.")
 
 # ============================================================
 # UI — Match Setup (Sidebar)
@@ -1433,6 +1557,7 @@ with st.sidebar:
     if st.button("🔄 Refresh Match Data", use_container_width=True, key="refresh_data"):
         check_for_new_matches.clear()
         load_model.clear()
+        build_points_table.clear()
         st.rerun()
 
 # ============================================================

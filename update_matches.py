@@ -2,13 +2,14 @@
 IPL 2026 Daily Match Updater
 =============================
 Fetches completed IPL 2026 match results from CricAPI,
-appends new matches to matches.csv, and incrementally
-updates elo_ratings.pkl and match_history.pkl.
+appends new matches to matches.csv, stores scores for NRR,
+retrains the XGBoost model, and updates all artifacts.
 
 Usage:
-    python update_matches.py              # Update with new matches
+    python update_matches.py              # Update + retrain
     python update_matches.py --backfill   # Fetch ALL completed IPL 2026 matches
     python update_matches.py --dry-run    # Preview without writing files
+    python update_matches.py --no-retrain # Update data only, skip model retrain
 
 API: api.cricapi.com (free tier: 100 requests/day)
 """
@@ -29,6 +30,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DATASETS_DIR = BASE_DIR / "Datasets"
 MODELS_DIR = BASE_DIR / "Models"
 MATCHES_CSV = DATASETS_DIR / "matches.csv"
+SCORES_JSON = DATASETS_DIR / "ipl_2026_scores.json"
 ELO_PKL = MODELS_DIR / "elo_ratings.pkl"
 HISTORY_PKL = MODELS_DIR / "match_history.pkl"
 UPDATE_LOG = BASE_DIR / "Datasets" / "update_log.json"
@@ -198,7 +200,7 @@ def extract_match_number(name: str) -> int:
 
 
 # ── Main Pipeline ─────────────────────────────────────────────
-def run_update(backfill: bool = False, dry_run: bool = False):
+def run_update(backfill: bool = False, dry_run: bool = False, no_retrain: bool = False):
     """
     Main update pipeline:
     1. Load existing data
@@ -245,6 +247,7 @@ def run_update(backfill: bool = False, dry_run: bool = False):
 
     # Fetch detailed info for each new match
     new_rows = []
+    new_scores = []
     new_history_entries = []
     api_hits = 1  # Already used 1 for series_info
 
@@ -263,6 +266,25 @@ def run_update(backfill: bool = False, dry_run: bool = False):
 
         row = build_csv_row(detail, match_num)
         new_rows.append(row)
+
+        # Store score data for NRR calculation
+        scores = detail.get("score", [])
+        score_entry = {
+            "match_num": match_num,
+            "date": detail.get("date", ""),
+            "team1": detail["teams"][0],
+            "team2": detail["teams"][1],
+            "winner": detail.get("matchWinner", ""),
+            "innings": [],
+        }
+        for inning in scores:
+            score_entry["innings"].append({
+                "team": inning.get("inning", "").replace(" Inning 1", "").replace(" Inning 2", ""),
+                "runs": inning.get("r", 0),
+                "wickets": inning.get("w", 0),
+                "overs": inning.get("o", 0),
+            })
+        new_scores.append(score_entry)
 
         # Build history entry (canonical codes)
         winner_code = resolve_team(row["winner"], alias_map)
@@ -326,11 +348,24 @@ def run_update(backfill: bool = False, dry_run: bool = False):
     log.info(f"Saved updated elo_ratings.pkl ({len(elo_ratings)} teams)")
     log.info(f"Saved updated match_history.pkl ({len(match_history)} matches)")
 
+    # Save scores for NRR calculation
+    existing_scores = []
+    if SCORES_JSON.exists():
+        try:
+            with open(SCORES_JSON) as f:
+                existing_scores = json.load(f)
+        except Exception:
+            pass
+    existing_scores.extend(new_scores)
+    with open(SCORES_JSON, "w") as f:
+        json.dump(existing_scores, f, indent=2)
+    log.info(f"Saved {len(existing_scores)} match scores to {SCORES_JSON}")
+
     # Save update log
     log_data = {
         "processed_match_ids": list(processed_ids),
         "last_updated": datetime.now(timezone.utc).isoformat(),
-        "total_2026_matches": len([m for m in match_history if True]),  # all
+        "total_2026_matches": len(new_rows) + len(processed_ids) - len(new_rows),
         "api_hits_used": api_hits,
     }
     with open(UPDATE_LOG, "w") as f:
@@ -344,11 +379,21 @@ def run_update(backfill: bool = False, dry_run: bool = False):
     log.info(f"  Total matches in CSV: {len(df_existing) + len(new_rows)}")
     log.info(f"  Total match history: {len(match_history)}")
     log.info(f"  API hits used today: {api_hits}")
-    log.info(f"\nUpdated Elo ratings:")
-    for team, elo in sorted(elo_ratings.items(), key=lambda x: -x[1]):
-        if elo != 1500 or team in ["MI", "CSK", "RCB", "DC", "KKR", "SRH", "RR", "PK", "LSG", "GT"]:
-            log.info(f"    {team}: {elo:.1f}")
     log.info("=" * 60)
+
+    # Retrain model if requested
+    if not no_retrain:
+        log.info("Retraining model with updated data...")
+        try:
+            from retrain_model import retrain, save_artifacts
+            result = retrain(quiet=False)
+            if result:
+                save_artifacts(*result, quiet=False)
+                log.info("Model retrained successfully!")
+            else:
+                log.error("Model retrain failed!")
+        except Exception as e:
+            log.error(f"Retrain error: {e}")
 
     return len(new_rows)
 
@@ -356,4 +401,5 @@ def run_update(backfill: bool = False, dry_run: bool = False):
 if __name__ == "__main__":
     backfill = "--backfill" in sys.argv
     dry_run = "--dry-run" in sys.argv
-    run_update(backfill=backfill, dry_run=dry_run)
+    no_retrain = "--no-retrain" in sys.argv
+    run_update(backfill=backfill, dry_run=dry_run, no_retrain=no_retrain)

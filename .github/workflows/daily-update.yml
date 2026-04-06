@@ -1,0 +1,47 @@
+name: Daily IPL 2026 Match Update
+
+on:
+  schedule:
+    # Run at 18:30 UTC (midnight IST) — after all IPL matches for the day
+    - cron: '30 18 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update-and-retrain:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pandas numpy xgboost scikit-learn requests
+
+      - name: Run match update + retrain
+        env:
+          CRICAPI_KEY: ${{ secrets.CRICAPI_KEY }}
+        run: |
+          python update_matches.py 2>&1 | tee update_output.txt
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git diff --quiet && echo "changed=false" >> $GITHUB_OUTPUT || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push updates
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Datasets/matches.csv Datasets/ipl_2026_scores.json Datasets/update_log.json Models/
+          git commit -m "chore: daily IPL 2026 data update + model retrain ($(date -u +%Y-%m-%d))"
+          git push
