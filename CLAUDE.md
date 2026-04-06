@@ -19,14 +19,24 @@ pip install -r requirements.txt
 
 # Retrain the model (run all cells in Jupyter)
 jupyter notebook training.ipynb
+
+# Update with latest IPL 2026 match results (daily)
+python update_matches.py
+
+# Backfill all completed IPL 2026 matches
+python update_matches.py --backfill
+
+# Preview without writing (dry run)
+python update_matches.py --dry-run
 ```
 
 ## Architecture
 
 ### Entry Points
 
-- **`streamlit_app.py`** — Single-file Streamlit app (~1700 lines). Contains all UI, prediction logic, and helper functions. No separate modules.
+- **`streamlit_app.py`** — Single-file Streamlit app (~1700 lines). Contains all UI, prediction logic, helper functions, and live data auto-update.
 - **`training.ipynb`** — ML pipeline: data cleaning → feature engineering → XGBoost training → artifact export to `Models/`.
+- **`update_matches.py`** — Daily update script: fetches completed IPL 2026 results from CricAPI, appends to `matches.csv`, incrementally updates Elo ratings and match history.
 
 ### Prediction Flow
 
@@ -79,8 +89,11 @@ All source data is in `Datasets/`:
 - Always resolve team names through `team_aliases.csv` — never hardcode variants. Covers defunct teams (RPS, GL, KTK, PW) and spelling variants.
 - Prefer `player_ipl_stats.csv` for player stats; fall back to `player_lifetime_stats.csv` for uncapped players.
 - The XGBoost model has a fixed 25-feature contract. The impact-player rule is applied **before** feature assembly (in `build_effective_team_strength()`), not by changing the model.
-- Append new 2026 match results to `matches.csv` after each game; re-run `training.ipynb` to rebuild Elo/form and retrain.
-- If adding new datasets or scripts, add path constants to a centralised location rather than scattering literals.
+- Live match data is fetched from CricAPI (`api.cricapi.com`, free tier 100 hits/day). The API key is in `update_matches.py` and `streamlit_app.py` (env var `CRICAPI_KEY` overrides).
+- `update_matches.py --backfill` fetches all completed IPL 2026 matches; daily runs fetch only new ones. Idempotent — safe to re-run.
+- The Streamlit app auto-checks for new matches every hour (1-hour TTL cache). If new matches exist, it updates artifacts and reloads.
+- Incremental updates only touch `elo_ratings.pkl` and `match_history.pkl` — the XGBoost model weights are NOT retrained. Form/H2H/venue stats improve automatically since they're computed dynamically from match history.
+- `Datasets/update_log.json` tracks processed API match IDs to prevent duplicates.
 
 ## IPL 2026 Teams
 

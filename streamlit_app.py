@@ -6,8 +6,10 @@ Requires: trained model artifacts in Models/ (run training.ipynb first)
 """
 
 import os
+import re
 import json
 import pickle
+import logging
 import datetime
 import streamlit as st
 import pandas as pd
@@ -16,7 +18,18 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from collections import defaultdict
 from difflib import SequenceMatcher
-from supabase import create_client, Client
+from pathlib import Path
+
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = None
+
+try:
+    import requests as _requests
+except ImportError:
+    _requests = None
 
 # ============================================================
 # Page Config
@@ -234,6 +247,212 @@ def iter_player_name_variants(short_name=None, full_name=None):
                 variants.add(f"{parts[i]} {parts[i+1]}")
 
     return sorted(v.strip() for v in variants if v and v.strip())
+
+
+# ============================================================
+# Live Data Update — fetch new IPL 2026 results from CricAPI
+# ============================================================
+CRICAPI_BASE = "https://api.cricapi.com/v1"
+CRICAPI_KEY = os.environ.get("CRICAPI_KEY", "7cd7438d-0e3b-4a25-8520-b34baff42e77")
+IPL_2026_SERIES_ID = "87c62aac-bc3c-4738-ab93-19da0690488f"
+UPDATE_LOG_PATH = Path("Datasets/update_log.json")
+ELO_K_FACTOR = 32
+
+_update_log = logging.getLogger("live_update")
+
+
+def _cricapi_get(endpoint: str, params: dict | None = None) -> dict | None:
+    """Safe CricAPI call; returns None on failure."""
+    if _requests is None:
+        return None
+    params = params or {}
+    params["apikey"] = CRICAPI_KEY
+    try:
+        resp = _requests.get(f"{CRICAPI_BASE}/{endpoint}", params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        return data if data.get("status") == "success" else None
+    except Exception:
+        return None
+
+
+def _elo_update(winner_elo: float, loser_elo: float, k: int = ELO_K_FACTOR):
+    """Elo calculation (mirrors training.ipynb)."""
+    exp = 1 / (1 + 10 ** ((loser_elo - winner_elo) / 400))
+    return winner_elo + k * (1 - exp), loser_elo + k * (0 - (1 - exp))
+
+
+def _parse_margin(status: str):
+    """Parse 'won by X runs/wkts' from status string."""
+    r = re.search(r"won by (\d+) run", status, re.I)
+    w = re.search(r"won by (\d+) wkt", status, re.I)
+    return (float(r.group(1)), 0.0) if r else (0.0, float(w.group(1))) if w else (0.0, 0.0)
+
+
+def _extract_match_num(name: str) -> int:
+    m = re.search(r"(\d+)(?:st|nd|rd|th) Match", name)
+    return int(m.group(1)) if m else 0
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def check_for_new_matches() -> dict:
+    """
+    Check CricAPI for completed IPL 2026 matches not yet in our data.
+    Cached for 1 hour to avoid burning API hits on every page reload.
+    Returns {new_count, last_updated, api_available}.
+    """
+    result = {"new_count": 0, "last_updated": None, "api_available": False}
+
+    # Load processed IDs
+    processed_ids = set()
+    if UPDATE_LOG_PATH.exists():
+        try:
+            with open(UPDATE_LOG_PATH) as f:
+                log_data = json.load(f)
+                processed_ids = set(log_data.get("processed_match_ids", []))
+                result["last_updated"] = log_data.get("last_updated")
+        except Exception:
+            pass
+
+    # Fetch series info (1 API hit)
+    data = _cricapi_get("series_info", {"id": IPL_2026_SERIES_ID})
+    if not data:
+        return result
+
+    result["api_available"] = True
+    match_list = data["data"].get("matchList", [])
+
+    # Deduplicate and find new completed matches
+    seen = set()
+    for m in match_list:
+        if m.get("matchEnded") and m["id"] not in seen and m["id"] not in processed_ids:
+            seen.add(m["id"])
+            result["new_count"] += 1
+
+    return result
+
+
+def run_live_update(alias_map: dict) -> int:
+    """
+    Fetch and integrate new IPL 2026 match results.
+    Returns number of new matches added.
+    """
+    # Load current state
+    processed_ids = set()
+    if UPDATE_LOG_PATH.exists():
+        try:
+            with open(UPDATE_LOG_PATH) as f:
+                processed_ids = set(json.load(f).get("processed_match_ids", []))
+        except Exception:
+            pass
+
+    with open("Models/elo_ratings.pkl", "rb") as f:
+        elo_ratings = pickle.load(f)
+    with open("Models/match_history.pkl", "rb") as f:
+        match_history = pickle.load(f)
+
+    # Fetch completed matches
+    data = _cricapi_get("series_info", {"id": IPL_2026_SERIES_ID})
+    if not data:
+        return 0
+
+    match_list = data["data"].get("matchList", [])
+    seen = set()
+    new_matches = []
+    for m in match_list:
+        if m.get("matchEnded") and m["id"] not in seen and m["id"] not in processed_ids:
+            seen.add(m["id"])
+            new_matches.append(m)
+
+    if not new_matches:
+        return 0
+
+    new_matches.sort(key=lambda x: x["date"])
+    csv_rows = []
+
+    for m in new_matches:
+        detail = _cricapi_get("match_info", {"id": m["id"]})
+        if not detail or not detail.get("data", {}).get("matchWinner"):
+            processed_ids.add(m["id"])
+            continue
+
+        d = detail["data"]
+        match_num = _extract_match_num(d.get("name", ""))
+        teams = d["teams"]
+        venue = d.get("venue", "")
+        city = venue.split(",")[-1].strip() if "," in venue else venue.split(" ")[0]
+        toss_raw = d.get("tossWinner", "")
+        toss_decision = d.get("tossChoice", "")
+        if toss_decision == "bowl":
+            toss_decision = "field"
+
+        toss_winner = ""
+        for t in teams:
+            if t.lower() == toss_raw.lower():
+                toss_winner = t
+                break
+
+        winner_name = d.get("matchWinner", "")
+        runs, wkts = _parse_margin(d.get("status", ""))
+
+        row = {
+            "match_id": 2026000 + match_num,
+            "season_id": 2026, "balls_per_over": 6, "city": city,
+            "date": d.get("date", ""), "event_name": "Indian Premier League",
+            "match_number": float(match_num), "gender": "male",
+            "match_type": "T20", "format": "T20", "overs": 20,
+            "season": 2026, "team_type": "club", "venue": venue,
+            "toss_winner": toss_winner, "team1": teams[0], "team2": teams[1],
+            "toss_decision": toss_decision, "winner": winner_name,
+            "win_by_runs": runs if runs else "",
+            "win_by_wickets": wkts if wkts else "",
+            "player_of_match": "", "result": "win",
+        }
+        csv_rows.append(row)
+
+        # Resolve to canonical codes and update Elo + history
+        def _resolve(n):
+            return alias_map.get(n.strip().lower(), n.strip())
+
+        w_code = _resolve(winner_name)
+        t1_code = _resolve(teams[0])
+        t2_code = _resolve(teams[1])
+        l_code = t2_code if w_code == t1_code else t1_code
+
+        elo_ratings.setdefault(w_code, 1500)
+        elo_ratings.setdefault(l_code, 1500)
+        new_w, new_l = _elo_update(elo_ratings[w_code], elo_ratings[l_code])
+        elo_ratings[w_code] = new_w
+        elo_ratings[l_code] = new_l
+
+        match_history.append({
+            "team1": t1_code, "team2": t2_code, "winner": w_code,
+            "venue": venue, "toss_winner": _resolve(toss_winner),
+            "toss_decision": toss_decision,
+        })
+        processed_ids.add(m["id"])
+
+    if not csv_rows:
+        return 0
+
+    # Append to CSV
+    pd.DataFrame(csv_rows).to_csv("Datasets/matches.csv", mode="a", header=False, index=False)
+
+    # Save updated artifacts
+    with open("Models/elo_ratings.pkl", "wb") as f:
+        pickle.dump(elo_ratings, f)
+    with open("Models/match_history.pkl", "wb") as f:
+        pickle.dump(match_history, f)
+
+    # Save update log
+    with open(UPDATE_LOG_PATH, "w") as f:
+        json.dump({
+            "processed_match_ids": list(processed_ids),
+            "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "matches_added": len(csv_rows),
+        }, f, indent=2)
+
+    return len(csv_rows)
 
 
 # ============================================================
@@ -1141,12 +1360,24 @@ if os.path.exists(squads_path):
     for code, data in _squads_data["teams"].items():
         SQUADS_2026[code] = data["squad"]
 
+# ============================================================
+# Auto-update check — fetch new IPL 2026 results if available
+# ============================================================
+_update_status = check_for_new_matches()
+if _update_status["new_count"] > 0 and _update_status["api_available"]:
+    n = run_live_update(alias_map)
+    if n > 0:
+        # Clear cached model data so fresh artifacts are loaded
+        load_model.clear()
+        check_for_new_matches.clear()
+        st.rerun()
+
 
 # ============================================================
 # UI — Header
 # ============================================================
 st.markdown('<p class="main-title">IPL 2026 Match Predictor</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">XGBoost ML Model trained on 18 seasons of IPL data (2008-2025)</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">XGBoost ML Model trained on 18 seasons of IPL data — now with live IPL 2026 updates</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 # ============================================================
@@ -1180,6 +1411,28 @@ with st.sidebar:
         except Exception:
             pass
         _clear_auth_session()
+        st.rerun()
+
+    # Data freshness indicator
+    st.markdown("---")
+    _ipl2026_count = sum(1 for m in match_history if m.get("venue", "") and True)
+    _last_update = _update_status.get("last_updated")
+    if _last_update:
+        try:
+            _ts = datetime.datetime.fromisoformat(_last_update)
+            _ago = datetime.datetime.now(datetime.timezone.utc) - _ts
+            _hrs = int(_ago.total_seconds() // 3600)
+            _time_str = f"{_hrs}h ago" if _hrs > 0 else "just now"
+        except Exception:
+            _time_str = "unknown"
+    else:
+        _time_str = "never"
+    # Count only 2026 matches in history
+    _m2026 = sum(1 for m in match_history if True) - 1146  # 1146 = pre-2026 historical matches
+    st.caption(f"📊 **Live Data:** {max(0, _m2026)} IPL 2026 matches · Updated {_time_str}")
+    if st.button("🔄 Refresh Match Data", use_container_width=True, key="refresh_data"):
+        check_for_new_matches.clear()
+        load_model.clear()
         st.rerun()
 
 # ============================================================

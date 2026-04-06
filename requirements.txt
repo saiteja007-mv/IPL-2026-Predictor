@@ -8,3 +8,4 @@ streamlit>=1.32.0
 Pillow
 openpyxl
 supabase>=2.0.0
+requests
