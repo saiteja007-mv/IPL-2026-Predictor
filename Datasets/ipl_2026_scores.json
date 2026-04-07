@@ -229,5 +229,272 @@
         "overs": 19.4
       }
     ]
+  },
+  {
+    "match_num": 1,
+    "date": "2026-03-28",
+    "team1": "Royal Challengers Bengaluru",
+    "team2": "Sunrisers Hyderabad",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 201,
+        "wickets": 9,
+        "overs": 20
+      },
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 203,
+        "wickets": 4,
+        "overs": 15.4
+      }
+    ]
+  },
+  {
+    "match_num": 2,
+    "date": "2026-03-29",
+    "team1": "Mumbai Indians",
+    "team2": "Kolkata Knight Riders",
+    "winner": "Mumbai Indians",
+    "innings": [
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 220,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Mumbai Indians",
+        "runs": 224,
+        "wickets": 4,
+        "overs": 19.1
+      }
+    ]
+  },
+  {
+    "match_num": 3,
+    "date": "2026-03-30",
+    "team1": "Rajasthan Royals",
+    "team2": "Chennai Super Kings",
+    "winner": "Rajasthan Royals",
+    "innings": [
+      {
+        "team": "Chennai Super Kings",
+        "runs": 127,
+        "wickets": 10,
+        "overs": 19.4
+      },
+      {
+        "team": "Rajasthan Royals",
+        "runs": 128,
+        "wickets": 2,
+        "overs": 12.1
+      }
+    ]
+  },
+  {
+    "match_num": 4,
+    "date": "2026-03-31",
+    "team1": "Punjab Kings",
+    "team2": "Gujarat Titans",
+    "winner": "Punjab Kings",
+    "innings": [
+      {
+        "team": "Gujarat Titans",
+        "runs": 162,
+        "wickets": 6,
+        "overs": 20
+      },
+      {
+        "team": "Punjab Kings",
+        "runs": 165,
+        "wickets": 7,
+        "overs": 19.1
+      }
+    ]
+  },
+  {
+    "match_num": 5,
+    "date": "2026-04-01",
+    "team1": "Lucknow Super Giants",
+    "team2": "Delhi Capitals",
+    "winner": "Delhi Capitals",
+    "innings": [
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 141,
+        "wickets": 10,
+        "overs": 18.4
+      },
+      {
+        "team": "Delhi Capitals",
+        "runs": 145,
+        "wickets": 4,
+        "overs": 17.1
+      }
+    ]
+  },
+  {
+    "match_num": 6,
+    "date": "2026-04-02",
+    "team1": "Kolkata Knight Riders",
+    "team2": "Sunrisers Hyderabad",
+    "winner": "Sunrisers Hyderabad",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 226,
+        "wickets": 8,
+        "overs": 20
+      },
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 161,
+        "wickets": 10,
+        "overs": 16
+      }
+    ]
+  },
+  {
+    "match_num": 7,
+    "date": "2026-04-03",
+    "team1": "Chennai Super Kings",
+    "team2": "Punjab Kings",
+    "winner": "Punjab Kings",
+    "innings": [
+      {
+        "team": "Chennai Super Kings",
+        "runs": 209,
+        "wickets": 5,
+        "overs": 20
+      },
+      {
+        "team": "Punjab Kings",
+        "runs": 210,
+        "wickets": 5,
+        "overs": 18.4
+      }
+    ]
+  },
+  {
+    "match_num": 9,
+    "date": "2026-04-04",
+    "team1": "Gujarat Titans",
+    "team2": "Rajasthan Royals",
+    "winner": "Rajasthan Royals",
+    "innings": [
+      {
+        "team": "Rajasthan Royals",
+        "runs": 210,
+        "wickets": 6,
+        "overs": 20
+      },
+      {
+        "team": "Gujarat Titans",
+        "runs": 204,
+        "wickets": 8,
+        "overs": 20
+      }
+    ]
+  },
+  {
+    "match_num": 8,
+    "date": "2026-04-04",
+    "team1": "Delhi Capitals",
+    "team2": "Mumbai Indians",
+    "winner": "Delhi Capitals",
+    "innings": [
+      {
+        "team": "Mumbai Indians",
+        "runs": 162,
+        "wickets": 6,
+        "overs": 20
+      },
+      {
+        "team": "Delhi Capitals",
+        "runs": 164,
+        "wickets": 4,
+        "overs": 18.1
+      }
+    ]
+  },
+  {
+    "match_num": 10,
+    "date": "2026-04-05",
+    "team1": "Sunrisers Hyderabad",
+    "team2": "Lucknow Super Giants",
+    "winner": "Lucknow Super Giants",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 156,
+        "wickets": 9,
+        "overs": 20
+      },
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 160,
+        "wickets": 5,
+        "overs": 19.5
+      }
+    ]
+  },
+  {
+    "match_num": 11,
+    "date": "2026-04-05",
+    "team1": "Royal Challengers Bengaluru",
+    "team2": "Chennai Super Kings",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 250,
+        "wickets": 3,
+        "overs": 20
+      },
+      {
+        "team": "Chennai Super Kings",
+        "runs": 207,
+        "wickets": 10,
+        "overs": 19.4
+      }
+    ]
+  },
+  {
+    "match_num": 12,
+    "date": "2026-04-06",
+    "team1": "Kolkata Knight Riders",
+    "team2": "Punjab Kings",
+    "winner": "No Winner",
+    "innings": [
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 25,
+        "wickets": 2,
+        "overs": 3.4
+      }
+    ]
+  },
+  {
+    "match_num": 13,
+    "date": "2026-04-07",
+    "team1": "Rajasthan Royals",
+    "team2": "Mumbai Indians",
+    "winner": "Rajasthan Royals",
+    "innings": [
+      {
+        "team": "Rajasthan Royals",
+        "runs": 150,
+        "wickets": 3,
+        "overs": 11
+      },
+      {
+        "team": "Mumbai Indians",
+        "runs": 123,
+        "wickets": 9,
+        "overs": 11
+      }
+    ]
   }
 ]
