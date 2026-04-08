@@ -496,5 +496,26 @@
         "overs": 11
       }
     ]
+  },
+  {
+    "match_num": 14,
+    "date": "2026-04-08",
+    "team1": "Delhi Capitals",
+    "team2": "Gujarat Titans",
+    "winner": "Gujarat Titans",
+    "innings": [
+      {
+        "team": "Gujarat Titans",
+        "runs": 210,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Delhi Capitals",
+        "runs": 209,
+        "wickets": 8,
+        "overs": 20
+      }
+    ]
   }
 ]
