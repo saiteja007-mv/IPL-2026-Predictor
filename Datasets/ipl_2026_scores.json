@@ -517,5 +517,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 15,
+    "date": "2026-04-09",
+    "team1": "Kolkata Knight Riders",
+    "team2": "Lucknow Super Giants",
+    "winner": "Lucknow Super Giants",
+    "innings": [
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 181,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 182,
+        "wickets": 7,
+        "overs": 20
+      }
+    ]
   }
 ]
