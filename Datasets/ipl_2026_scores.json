@@ -538,5 +538,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 16,
+    "date": "2026-04-10",
+    "team1": "Rajasthan Royals",
+    "team2": "Royal Challengers Bengaluru",
+    "winner": "Rajasthan Royals",
+    "innings": [
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 201,
+        "wickets": 8,
+        "overs": 20
+      },
+      {
+        "team": "Rajasthan Royals",
+        "runs": 202,
+        "wickets": 4,
+        "overs": 18
+      }
+    ]
   }
 ]
