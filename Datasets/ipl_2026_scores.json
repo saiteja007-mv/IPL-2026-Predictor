@@ -601,5 +601,47 @@
         "overs": 18.5
       }
     ]
+  },
+  {
+    "match_num": 20,
+    "date": "2026-04-12",
+    "team1": "Mumbai Indians",
+    "team2": "Royal Challengers Bengaluru",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 240,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Mumbai Indians",
+        "runs": 222,
+        "wickets": 5,
+        "overs": 20
+      }
+    ]
+  },
+  {
+    "match_num": 19,
+    "date": "2026-04-12",
+    "team1": "Lucknow Super Giants",
+    "team2": "Gujarat Titans",
+    "winner": "Gujarat Titans",
+    "innings": [
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 164,
+        "wickets": 8,
+        "overs": 20
+      },
+      {
+        "team": "Gujarat Titans",
+        "runs": 165,
+        "wickets": 3,
+        "overs": 18.4
+      }
+    ]
   }
 ]
