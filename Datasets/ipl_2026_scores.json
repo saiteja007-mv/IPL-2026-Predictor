@@ -412,5 +412,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 21,
+    "date": "2026-04-13",
+    "team1": "Sunrisers Hyderabad",
+    "team2": "Rajasthan Royals",
+    "winner": "Sunrisers Hyderabad",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 216,
+        "wickets": 6,
+        "overs": 20
+      },
+      {
+        "team": "Rajasthan Royals",
+        "runs": 159,
+        "wickets": 10,
+        "overs": 19
+      }
+    ]
   }
 ]
