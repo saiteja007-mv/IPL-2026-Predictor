@@ -327,10 +327,13 @@ def run_update(backfill: bool = False, dry_run: bool = False, no_retrain: bool =
         log.info(f"  API hits used: {api_hits}")
         return len(new_rows)
 
-    # Append to matches.csv
+    # Append to matches.csv — deduplicate by date+team1+team2
     df_new = pd.DataFrame(new_rows)
-    df_new.to_csv(MATCHES_CSV, mode="a", header=False, index=False)
-    log.info(f"Appended {len(new_rows)} rows to {MATCHES_CSV}")
+    existing_keys = set(zip(df_existing["date"], df_existing["team1"], df_existing["team2"]))
+    df_new = df_new[~df_new.apply(lambda r: (r["date"], r["team1"], r["team2"]) in existing_keys, axis=1)]
+    if len(df_new) > 0:
+        df_new.to_csv(MATCHES_CSV, mode="a", header=False, index=False)
+    log.info(f"Appended {len(df_new)} rows to {MATCHES_CSV}")
 
     # Update Elo ratings and match history incrementally
     for entry, winner_code, team1_code, team2_code in new_history_entries:
@@ -360,7 +363,7 @@ def run_update(backfill: bool = False, dry_run: bool = False, no_retrain: bool =
     log.info(f"Saved updated elo_ratings.pkl ({len(elo_ratings)} teams)")
     log.info(f"Saved updated match_history.pkl ({len(match_history)} matches)")
 
-    # Save scores for NRR calculation
+    # Save scores for NRR calculation — deduplicate by match_num
     existing_scores = []
     if SCORES_JSON.exists():
         try:
@@ -368,7 +371,12 @@ def run_update(backfill: bool = False, dry_run: bool = False, no_retrain: bool =
                 existing_scores = json.load(f)
         except Exception:
             pass
-    existing_scores.extend(new_scores)
+    existing_nums = {s["match_num"] for s in existing_scores}
+    for s in new_scores:
+        if s["match_num"] not in existing_nums:
+            existing_scores.append(s)
+            existing_nums.add(s["match_num"])
+    existing_scores.sort(key=lambda x: x["match_num"])
     with open(SCORES_JSON, "w") as f:
         json.dump(existing_scores, f, indent=2)
     log.info(f"Saved {len(existing_scores)} match scores to {SCORES_JSON}")
