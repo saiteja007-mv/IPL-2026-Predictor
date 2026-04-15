@@ -454,5 +454,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 23,
+    "date": "2026-04-15",
+    "team1": "Royal Challengers Bengaluru",
+    "team2": "Lucknow Super Giants",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 146,
+        "wickets": 10,
+        "overs": 20
+      },
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 149,
+        "wickets": 5,
+        "overs": 15.1
+      }
+    ]
   }
 ]
