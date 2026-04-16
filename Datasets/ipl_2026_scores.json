@@ -475,5 +475,26 @@
         "overs": 15.1
       }
     ]
+  },
+  {
+    "match_num": 24,
+    "date": "2026-04-16",
+    "team1": "Mumbai Indians",
+    "team2": "Punjab Kings",
+    "winner": "Punjab Kings",
+    "innings": [
+      {
+        "team": "Mumbai Indians",
+        "runs": 195,
+        "wickets": 6,
+        "overs": 20
+      },
+      {
+        "team": "Punjab Kings",
+        "runs": 198,
+        "wickets": 3,
+        "overs": 16.3
+      }
+    ]
   }
 ]
