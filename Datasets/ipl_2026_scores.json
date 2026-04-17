@@ -496,5 +496,26 @@
         "overs": 16.3
       }
     ]
+  },
+  {
+    "match_num": 25,
+    "date": "2026-04-17",
+    "team1": "Gujarat Titans",
+    "team2": "Kolkata Knight Riders",
+    "winner": "Gujarat Titans",
+    "innings": [
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 180,
+        "wickets": 10,
+        "overs": 20
+      },
+      {
+        "team": "Gujarat Titans",
+        "runs": 181,
+        "wickets": 5,
+        "overs": 19.4
+      }
+    ]
   }
 ]
