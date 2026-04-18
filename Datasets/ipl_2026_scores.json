@@ -517,5 +517,47 @@
         "overs": 19.4
       }
     ]
+  },
+  {
+    "match_num": 26,
+    "date": "2026-04-18",
+    "team1": "Royal Challengers Bengaluru",
+    "team2": "Delhi Capitals",
+    "winner": "Delhi Capitals",
+    "innings": [
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 175,
+        "wickets": 8,
+        "overs": 20
+      },
+      {
+        "team": "Delhi Capitals",
+        "runs": 179,
+        "wickets": 4,
+        "overs": 19.5
+      }
+    ]
+  },
+  {
+    "match_num": 27,
+    "date": "2026-04-18",
+    "team1": "Sunrisers Hyderabad",
+    "team2": "Chennai Super Kings",
+    "winner": "Sunrisers Hyderabad",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 194,
+        "wickets": 9,
+        "overs": 20
+      },
+      {
+        "team": "Chennai Super Kings",
+        "runs": 184,
+        "wickets": 8,
+        "overs": 20
+      }
+    ]
   }
 ]
