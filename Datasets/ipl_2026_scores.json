@@ -559,5 +559,47 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 28,
+    "date": "2026-04-19",
+    "team1": "Kolkata Knight Riders",
+    "team2": "Rajasthan Royals",
+    "winner": "Kolkata Knight Riders",
+    "innings": [
+      {
+        "team": "Rajasthan Royals",
+        "runs": 155,
+        "wickets": 9,
+        "overs": 20
+      },
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 161,
+        "wickets": 6,
+        "overs": 19.4
+      }
+    ]
+  },
+  {
+    "match_num": 29,
+    "date": "2026-04-19",
+    "team1": "Punjab Kings",
+    "team2": "Lucknow Super Giants",
+    "winner": "Punjab Kings",
+    "innings": [
+      {
+        "team": "Punjab Kings",
+        "runs": 254,
+        "wickets": 7,
+        "overs": 20
+      },
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 200,
+        "wickets": 5,
+        "overs": 20
+      }
+    ]
   }
 ]
