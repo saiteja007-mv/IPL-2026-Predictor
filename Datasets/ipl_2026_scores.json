@@ -601,5 +601,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 30,
+    "date": "2026-04-20",
+    "team1": "Gujarat Titans",
+    "team2": "Mumbai Indians",
+    "winner": "Mumbai Indians",
+    "innings": [
+      {
+        "team": "Mumbai Indians",
+        "runs": 199,
+        "wickets": 5,
+        "overs": 20
+      },
+      {
+        "team": "Gujarat Titans",
+        "runs": 100,
+        "wickets": 10,
+        "overs": 15.5
+      }
+    ]
   }
 ]
