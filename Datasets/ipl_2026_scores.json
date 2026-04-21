@@ -622,5 +622,26 @@
         "overs": 15.5
       }
     ]
+  },
+  {
+    "match_num": 31,
+    "date": "2026-04-21",
+    "team1": "Sunrisers Hyderabad",
+    "team2": "Delhi Capitals",
+    "winner": "Sunrisers Hyderabad",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 242,
+        "wickets": 2,
+        "overs": 20
+      },
+      {
+        "team": "Delhi Capitals",
+        "runs": 195,
+        "wickets": 9,
+        "overs": 20
+      }
+    ]
   }
 ]
