@@ -664,5 +664,26 @@
         "overs": 18
       }
     ]
+  },
+  {
+    "match_num": 33,
+    "date": "2026-04-23",
+    "team1": "Mumbai Indians",
+    "team2": "Chennai Super Kings",
+    "winner": "Chennai Super Kings",
+    "innings": [
+      {
+        "team": "Chennai Super Kings",
+        "runs": 207,
+        "wickets": 6,
+        "overs": 20
+      },
+      {
+        "team": "Mumbai Indians",
+        "runs": 104,
+        "wickets": 10,
+        "overs": 19
+      }
+    ]
   }
 ]
