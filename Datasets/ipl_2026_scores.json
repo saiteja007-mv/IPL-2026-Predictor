@@ -685,5 +685,26 @@
         "overs": 19
       }
     ]
+  },
+  {
+    "match_num": 34,
+    "date": "2026-04-24",
+    "team1": "Royal Challengers Bengaluru",
+    "team2": "Gujarat Titans",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Gujarat Titans",
+        "runs": 205,
+        "wickets": 3,
+        "overs": 20
+      },
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 206,
+        "wickets": 5,
+        "overs": 18.5
+      }
+    ]
   }
 ]
