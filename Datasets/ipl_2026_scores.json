@@ -706,5 +706,47 @@
         "overs": 18.5
       }
     ]
+  },
+  {
+    "match_num": 35,
+    "date": "2026-04-25",
+    "team1": "Delhi Capitals",
+    "team2": "Punjab Kings",
+    "winner": "Punjab Kings",
+    "innings": [
+      {
+        "team": "Delhi Capitals",
+        "runs": 264,
+        "wickets": 2,
+        "overs": 20
+      },
+      {
+        "team": "Delhi Capitals",
+        "runs": 265,
+        "wickets": 4,
+        "overs": 18.5
+      }
+    ]
+  },
+  {
+    "match_num": 36,
+    "date": "2026-04-25",
+    "team1": "Rajasthan Royals",
+    "team2": "Sunrisers Hyderabad",
+    "winner": "Sunrisers Hyderabad",
+    "innings": [
+      {
+        "team": "Rajasthan Royals",
+        "runs": 228,
+        "wickets": 6,
+        "overs": 20
+      },
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 229,
+        "wickets": 5,
+        "overs": 18.3
+      }
+    ]
   }
 ]
