@@ -748,5 +748,47 @@
         "overs": 18.3
       }
     ]
+  },
+  {
+    "match_num": 37,
+    "date": "2026-04-26",
+    "team1": "Chennai Super Kings",
+    "team2": "Gujarat Titans",
+    "winner": "Gujarat Titans",
+    "innings": [
+      {
+        "team": "Chennai Super Kings",
+        "runs": 158,
+        "wickets": 7,
+        "overs": 20
+      },
+      {
+        "team": "Gujarat Titans",
+        "runs": 162,
+        "wickets": 2,
+        "overs": 16.4
+      }
+    ]
+  },
+  {
+    "match_num": 38,
+    "date": "2026-04-26",
+    "team1": "Lucknow Super Giants",
+    "team2": "Kolkata Knight Riders",
+    "winner": "No Winner",
+    "innings": [
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 155,
+        "wickets": 7,
+        "overs": 20
+      },
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 155,
+        "wickets": 8,
+        "overs": 20
+      }
+    ]
   }
 ]
