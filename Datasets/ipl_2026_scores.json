@@ -790,5 +790,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 39,
+    "date": "2026-04-27",
+    "team1": "Delhi Capitals",
+    "team2": "Royal Challengers Bengaluru",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Delhi Capitals",
+        "runs": 75,
+        "wickets": 10,
+        "overs": 16.3
+      },
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 77,
+        "wickets": 1,
+        "overs": 6.3
+      }
+    ]
   }
 ]
