@@ -811,5 +811,26 @@
         "overs": 6.3
       }
     ]
+  },
+  {
+    "match_num": 40,
+    "date": "2026-04-28",
+    "team1": "Punjab Kings",
+    "team2": "Rajasthan Royals",
+    "winner": "Rajasthan Royals",
+    "innings": [
+      {
+        "team": "Punjab Kings",
+        "runs": 222,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Rajasthan Royals",
+        "runs": 228,
+        "wickets": 4,
+        "overs": 19.2
+      }
+    ]
   }
 ]
