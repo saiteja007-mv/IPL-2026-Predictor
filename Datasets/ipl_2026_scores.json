@@ -840,5 +840,13 @@
     "team2": "Sunrisers Hyderabad",
     "winner": "Sunrisers Hyderabad",
     "innings": []
+  },
+  {
+    "match_num": 42,
+    "date": "2026-04-30",
+    "team1": "Gujarat Titans",
+    "team2": "Royal Challengers Bengaluru",
+    "winner": "Gujarat Titans",
+    "innings": []
   }
 ]
