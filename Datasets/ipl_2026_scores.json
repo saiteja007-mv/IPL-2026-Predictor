@@ -848,5 +848,13 @@
     "team2": "Royal Challengers Bengaluru",
     "winner": "Gujarat Titans",
     "innings": []
+  },
+  {
+    "match_num": 43,
+    "date": "2026-05-01",
+    "team1": "Rajasthan Royals",
+    "team2": "Delhi Capitals",
+    "winner": "Delhi Capitals",
+    "innings": []
   }
 ]
