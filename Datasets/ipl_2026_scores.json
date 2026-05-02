@@ -856,5 +856,26 @@
     "team2": "Delhi Capitals",
     "winner": "Delhi Capitals",
     "innings": []
+  },
+  {
+    "match_num": 44,
+    "date": "2026-05-02",
+    "team1": "Chennai Super Kings",
+    "team2": "Mumbai Indians",
+    "winner": "Chennai Super Kings",
+    "innings": [
+      {
+        "team": "Mumbai Indians",
+        "runs": 159,
+        "wickets": 7,
+        "overs": 20
+      },
+      {
+        "team": "Chennai Super Kings",
+        "runs": 160,
+        "wickets": 2,
+        "overs": 18.1
+      }
+    ]
   }
 ]

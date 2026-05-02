@@ -1211,3 +1211,4 @@ match_id,season_id,balls_per_over,city,date,event_name,match_number,gender,match
 2026041,2026,6,Mumbai,2026-04-29,Indian Premier League,41.0,male,T20,T20,20,2026,club,"Wankhede Stadium, Mumbai",Mumbai Indians,Mumbai Indians,Sunrisers Hyderabad,bat,Sunrisers Hyderabad,,6.0,,win
 2026042,2026,6,Ahmedabad,2026-04-30,Indian Premier League,42.0,male,T20,T20,20,2026,club,"Narendra Modi Stadium, Ahmedabad",Gujarat Titans,Gujarat Titans,Royal Challengers Bengaluru,field,Gujarat Titans,,4.0,,win
 2026043,2026,6,Jaipur,2026-05-01,Indian Premier League,43.0,male,T20,T20,20,2026,club,"Sawai Mansingh Stadium, Jaipur",Rajasthan Royals,Rajasthan Royals,Delhi Capitals,bat,Delhi Capitals,,7.0,,win
+2026044,2026,6,Chennai,2026-05-02,Indian Premier League,44.0,male,T20,T20,20,2026,club,"MA Chidambaram Stadium, Chennai",Mumbai Indians,Chennai Super Kings,Mumbai Indians,bat,Chennai Super Kings,,8.0,,win
