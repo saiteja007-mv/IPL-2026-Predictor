@@ -877,5 +877,47 @@
         "overs": 18.1
       }
     ]
+  },
+  {
+    "match_num": 45,
+    "date": "2026-05-03",
+    "team1": "Sunrisers Hyderabad",
+    "team2": "Kolkata Knight Riders",
+    "winner": "Kolkata Knight Riders",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 165,
+        "wickets": 10,
+        "overs": 19
+      },
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 169,
+        "wickets": 3,
+        "overs": 18.2
+      }
+    ]
+  },
+  {
+    "match_num": 46,
+    "date": "2026-05-03",
+    "team1": "Gujarat Titans",
+    "team2": "Punjab Kings",
+    "winner": "Gujarat Titans",
+    "innings": [
+      {
+        "team": "Punjab Kings",
+        "runs": 163,
+        "wickets": 9,
+        "overs": 20
+      },
+      {
+        "team": "Gujarat Titans",
+        "runs": 167,
+        "wickets": 6,
+        "overs": 19.5
+      }
+    ]
   }
 ]
