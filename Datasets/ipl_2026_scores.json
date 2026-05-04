@@ -919,5 +919,13 @@
         "overs": 19.5
       }
     ]
+  },
+  {
+    "match_num": 47,
+    "date": "2026-05-04",
+    "team1": "Mumbai Indians",
+    "team2": "Lucknow Super Giants",
+    "winner": "Mumbai Indians",
+    "innings": []
   }
 ]
