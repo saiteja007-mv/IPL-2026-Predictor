@@ -927,5 +927,13 @@
     "team2": "Lucknow Super Giants",
     "winner": "Mumbai Indians",
     "innings": []
+  },
+  {
+    "match_num": 48,
+    "date": "2026-05-05",
+    "team1": "Delhi Capitals",
+    "team2": "Chennai Super Kings",
+    "winner": "Chennai Super Kings",
+    "innings": []
   }
 ]
