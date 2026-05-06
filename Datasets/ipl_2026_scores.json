@@ -935,5 +935,26 @@
     "team2": "Chennai Super Kings",
     "winner": "Chennai Super Kings",
     "innings": []
+  },
+  {
+    "match_num": 49,
+    "date": "2026-05-06",
+    "team1": "Sunrisers Hyderabad",
+    "team2": "Punjab Kings",
+    "winner": "Sunrisers Hyderabad",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 235,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Punjab Kings",
+        "runs": 202,
+        "wickets": 7,
+        "overs": 20
+      }
+    ]
   }
 ]
