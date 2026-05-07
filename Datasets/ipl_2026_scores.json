@@ -956,5 +956,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 50,
+    "date": "2026-05-07",
+    "team1": "Lucknow Super Giants",
+    "team2": "Royal Challengers Bengaluru",
+    "winner": "LSG",
+    "innings": [
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 209,
+        "wickets": 3,
+        "overs": 19
+      },
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 203,
+        "wickets": 6,
+        "overs": 19
+      }
+    ]
   }
 ]
