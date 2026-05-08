@@ -977,5 +977,26 @@
         "overs": 19
       }
     ]
+  },
+  {
+    "match_num": 51,
+    "date": "2026-05-08",
+    "team1": "Delhi Capitals",
+    "team2": "Kolkata Knight Riders",
+    "winner": "Kolkata Knight Riders",
+    "innings": [
+      {
+        "team": "Delhi Capitals",
+        "runs": 142,
+        "wickets": 8,
+        "overs": 20
+      },
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 147,
+        "wickets": 2,
+        "overs": 14.2
+      }
+    ]
   }
 ]
