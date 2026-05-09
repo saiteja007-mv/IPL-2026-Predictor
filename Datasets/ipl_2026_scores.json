@@ -998,5 +998,26 @@
         "overs": 14.2
       }
     ]
+  },
+  {
+    "match_num": 52,
+    "date": "2026-05-09",
+    "team1": "Rajasthan Royals",
+    "team2": "Gujarat Titans",
+    "winner": "Gujarat Titans",
+    "innings": [
+      {
+        "team": "Gujarat Titans",
+        "runs": 229,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Rajasthan Royals",
+        "runs": 152,
+        "wickets": 10,
+        "overs": 16.3
+      }
+    ]
   }
 ]
