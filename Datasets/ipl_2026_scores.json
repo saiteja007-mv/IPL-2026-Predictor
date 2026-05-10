@@ -1019,5 +1019,47 @@
         "overs": 16.3
       }
     ]
+  },
+  {
+    "match_num": 53,
+    "date": "2026-05-10",
+    "team1": "Chennai Super Kings",
+    "team2": "Lucknow Super Giants",
+    "winner": "Chennai Super Kings",
+    "innings": [
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 203,
+        "wickets": 8,
+        "overs": 20
+      },
+      {
+        "team": "Chennai Super Kings",
+        "runs": 208,
+        "wickets": 5,
+        "overs": 19.2
+      }
+    ]
+  },
+  {
+    "match_num": 54,
+    "date": "2026-05-10",
+    "team1": "Royal Challengers Bengaluru",
+    "team2": "Mumbai Indians",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Mumbai Indians",
+        "runs": 166,
+        "wickets": 7,
+        "overs": 20
+      },
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 167,
+        "wickets": 8,
+        "overs": 20
+      }
+    ]
   }
 ]
