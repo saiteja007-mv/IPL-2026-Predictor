@@ -1061,5 +1061,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 55,
+    "date": "2026-05-11",
+    "team1": "Punjab Kings",
+    "team2": "Delhi Capitals",
+    "winner": "Delhi Capitals",
+    "innings": [
+      {
+        "team": "Punjab Kings",
+        "runs": 210,
+        "wickets": 5,
+        "overs": 20
+      },
+      {
+        "team": "Delhi Capitals",
+        "runs": 216,
+        "wickets": 7,
+        "overs": 19
+      }
+    ]
   }
 ]
