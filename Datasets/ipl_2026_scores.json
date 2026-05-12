@@ -1082,5 +1082,26 @@
         "overs": 19
       }
     ]
+  },
+  {
+    "match_num": 56,
+    "date": "2026-05-12",
+    "team1": "Gujarat Titans",
+    "team2": "Sunrisers Hyderabad",
+    "winner": "Gujarat Titans",
+    "innings": [
+      {
+        "team": "Gujarat Titans",
+        "runs": 168,
+        "wickets": 5,
+        "overs": 20
+      },
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 86,
+        "wickets": 10,
+        "overs": 14.5
+      }
+    ]
   }
 ]
