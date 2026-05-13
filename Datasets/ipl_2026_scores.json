@@ -1103,5 +1103,26 @@
         "overs": 14.5
       }
     ]
+  },
+  {
+    "match_num": 57,
+    "date": "2026-05-13",
+    "team1": "Royal Challengers Bengaluru",
+    "team2": "Kolkata Knight Riders",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 192,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 194,
+        "wickets": 4,
+        "overs": 19.1
+      }
+    ]
   }
 ]
