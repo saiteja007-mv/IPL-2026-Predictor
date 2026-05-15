@@ -1145,5 +1145,26 @@
         "overs": 19.5
       }
     ]
+  },
+  {
+    "match_num": 59,
+    "date": "2026-05-15",
+    "team1": "Lucknow Super Giants",
+    "team2": "Chennai Super Kings",
+    "winner": "Lucknow Super Giants",
+    "innings": [
+      {
+        "team": "Chennai Super Kings",
+        "runs": 187,
+        "wickets": 5,
+        "overs": 20
+      },
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 188,
+        "wickets": 3,
+        "overs": 16.4
+      }
+    ]
   }
 ]
