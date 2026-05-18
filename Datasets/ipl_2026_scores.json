@@ -1229,5 +1229,26 @@
         "overs": 19.2
       }
     ]
+  },
+  {
+    "match_num": 63,
+    "date": "2026-05-18",
+    "team1": "Chennai Super Kings",
+    "team2": "Sunrisers Hyderabad",
+    "winner": "Sunrisers Hyderabad",
+    "innings": [
+      {
+        "team": "Chennai Super Kings",
+        "runs": 180,
+        "wickets": 7,
+        "overs": 20
+      },
+      {
+        "team": "Chennai Super Kings",
+        "runs": 181,
+        "wickets": 5,
+        "overs": 19
+      }
+    ]
   }
 ]
