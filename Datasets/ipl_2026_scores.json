@@ -1250,5 +1250,26 @@
         "overs": 19
       }
     ]
+  },
+  {
+    "match_num": 64,
+    "date": "2026-05-19",
+    "team1": "Rajasthan Royals",
+    "team2": "Lucknow Super Giants",
+    "winner": "Rajasthan Royals",
+    "innings": [
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 220,
+        "wickets": 5,
+        "overs": 20
+      },
+      {
+        "team": "Rajasthan Royals",
+        "runs": 225,
+        "wickets": 3,
+        "overs": 19.1
+      }
+    ]
   }
 ]
