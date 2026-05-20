@@ -1271,5 +1271,26 @@
         "overs": 19.1
       }
     ]
+  },
+  {
+    "match_num": 65,
+    "date": "2026-05-20",
+    "team1": "Kolkata Knight Riders",
+    "team2": "Mumbai Indians",
+    "winner": "Kolkata Knight Riders",
+    "innings": [
+      {
+        "team": "Mumbai Indians",
+        "runs": 147,
+        "wickets": 8,
+        "overs": 20
+      },
+      {
+        "team": "Kolkata Knight Riders",
+        "runs": 148,
+        "wickets": 6,
+        "overs": 18.5
+      }
+    ]
   }
 ]
