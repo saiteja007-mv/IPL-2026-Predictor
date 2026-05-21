@@ -1292,5 +1292,26 @@
         "overs": 18.5
       }
     ]
+  },
+  {
+    "match_num": 66,
+    "date": "2026-05-21",
+    "team1": "Gujarat Titans",
+    "team2": "Chennai Super Kings",
+    "winner": "Gujarat Titans",
+    "innings": [
+      {
+        "team": "Gujarat Titans",
+        "runs": 229,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Chennai Super Kings",
+        "runs": 140,
+        "wickets": 10,
+        "overs": 13.4
+      }
+    ]
   }
 ]
