@@ -1313,5 +1313,26 @@
         "overs": 13.4
       }
     ]
+  },
+  {
+    "match_num": 67,
+    "date": "2026-05-22",
+    "team1": "Sunrisers Hyderabad",
+    "team2": "Royal Challengers Bengaluru",
+    "winner": "Sunrisers Hyderabad",
+    "innings": [
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 255,
+        "wickets": 4,
+        "overs": 20
+      },
+      {
+        "team": "Sunrisers Hyderabad",
+        "runs": 200,
+        "wickets": 4,
+        "overs": 20
+      }
+    ]
   }
 ]
