@@ -1334,5 +1334,26 @@
         "overs": 20
       }
     ]
+  },
+  {
+    "match_num": 68,
+    "date": "2026-05-23",
+    "team1": "Lucknow Super Giants",
+    "team2": "Punjab Kings",
+    "winner": "Punjab Kings",
+    "innings": [
+      {
+        "team": "Lucknow Super Giants",
+        "runs": 196,
+        "wickets": 6,
+        "overs": 20
+      },
+      {
+        "team": "Punjab Kings",
+        "runs": 200,
+        "wickets": 3,
+        "overs": 18
+      }
+    ]
   }
 ]
