@@ -1,5 +1,26 @@
 [
   {
+    "match_num": 0,
+    "date": "2026-05-26",
+    "team1": "Royal Challengers Bengaluru",
+    "team2": "Gujarat Titans",
+    "winner": "Royal Challengers Bengaluru",
+    "innings": [
+      {
+        "team": "Royal Challengers Bengaluru",
+        "runs": 254,
+        "wickets": 5,
+        "overs": 20
+      },
+      {
+        "team": "Gujarat Titans",
+        "runs": 162,
+        "wickets": 10,
+        "overs": 19.3
+      }
+    ]
+  },
+  {
     "match_num": 1,
     "date": "2026-03-28",
     "team1": "Royal Challengers Bengaluru",
